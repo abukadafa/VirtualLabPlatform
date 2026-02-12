@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # MongoDB for Application Data
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb-prod
+    restart: always
+    environment:
+      - MONGO_INITDB_DATABASE=virtuallab
+    volumes:
+      - mongodb_data_prod:/data/db
+    networks:
+      - internal-network
+
+  # Redis for Queue Management
+  redis:
+    image: redis:alpine
+    container_name: redis-prod
+    restart: always
+    command: redis-server --appendonly yes
+    networks:
+      - internal-network
+
+  # Guacamole Daemon (guacd)
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: guacd-prod
+    restart: always
+    networks:
+      - internal-network
+
+  # Guacamole Database (PostgreSQL)
+  guacamole-db:
+    image: postgres:15
+    container_name: guacamole-postgres-prod
+    restart: always
+    environment:
+      - POSTGRES_DB=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=${GUAC_DB_PASSWORD}
+    volumes:
+      - guacamole-db-data-prod:/var/lib/postgresql/data
+    networks:
+      - internal-network
+
+  # Guacamole Web App
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole-prod
+    restart: always
+    environment:
+      - GUACD_HOSTNAME=guacd
+      - POSTGRES_HOSTNAME=guacamole-db
+      - POSTGRES_DATABASE=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=${GUAC_DB_PASSWORD}
+    depends_on:
+      - guacd
+      - guacamole-db
+    networks:
+      - internal-network
+
+  # Backend Server
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: server-prod
+    restart: always
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/virtuallab
+      - REDIS_HOST=redis
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - GUACAMOLE_URL=http://guacamole:8080/guacamole/
+    depends_on:
+      - mongodb
+      - redis
+      - guacamole
+    networks:
+      - internal-network
+      - proxy-network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../client/dist:/usr/share/nginx/html:ro
+      - certbot-etc:/etc/letsencrypt:rw
+      - certbot-var:/var/lib/letsencrypt:rw
+    depends_on:
+      - server
+    networks:
+      - proxy-network
+
+networks:
+  internal-network:
+    driver: bridge
+  proxy-network:
+    driver: bridge
+
+volumes:
+  mongodb_data_prod:
+  guacamole-db-data-prod:
+  certbot-etc:
+  certbot-var:

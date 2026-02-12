@@ -1,0 +1,238 @@
+﻿services:
+  # PostgreSQL database for Guacamole
+  guacamole-db:
+    image: postgres:15
+    container_name: guacamole-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guacamole_db
+      POSTGRES_USER: guacamole_user
+      POSTGRES_PASSWORD: guacamole_password
+    volumes:
+      - guacamole-db-data:/var/lib/postgresql/data
+      - ./guacamole/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - guacamole-network
+
+  # MongoDB for Application Data
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - guacamole-network
+
+  # Backend Server
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/virtuallab
+      - REDIS_HOST=redis
+      - JWT_SECRET=your-secret-key-change-in-production
+      - NODE_ENV=production
+    depends_on:
+      - mongodb
+    networks:
+      - guacamole-network
+
+  # Redis for Queue Management
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - guacamole-network
+
+  # Guacamole Daemon (guacd)
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: guacd
+    restart: unless-stopped
+    networks:
+      - guacamole-network
+    ports:
+      - "4822:4822"
+
+  # Guacamole Web Application
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole
+    restart: unless-stopped
+    environment:
+      GUACD_HOSTNAME: guacd
+      POSTGRES_HOSTNAME: guacamole-db
+      POSTGRES_DATABASE: guacamole_db
+      POSTGRES_USER: guacamole_user
+      POSTGRES_PASSWORD: guacamole_password
+    depends_on:
+      - guacd
+      - guacamole-db
+    networks:
+      - guacamole-network
+    ports:
+      - "8080:8080"
+
+  # AI Lab Container
+  ai-lab:
+    build:
+      context: ./ai-lab
+      dockerfile: Dockerfile
+    image: virtual-lab/ai-lab:latest
+    container_name: ai-lab-1
+    hostname: ai-lab-1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    read_only: true
+    tmpfs:
+      - /tmp:size=1G,mode=1777
+      - /run:size=100M,mode=0755
+      - /home/labuser/.cache:size=500M,uid=1000,gid=1000
+    networks:
+      - guacamole-network
+    ports:
+      - "5901:5901"
+    volumes:
+      - ai-lab-data:/home/labuser/workspace
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+          pids: 512
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Cybersecurity Lab Container  
+  cyber-lab:
+    build:
+      context: ./cyber-lab
+      dockerfile: Dockerfile
+    image: virtual-lab/cyber-lab:latest
+    container_name: cyber-lab-1
+    hostname: cyber-lab-1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - NET_ADMIN
+      - NET_RAW
+    read_only: true
+    tmpfs:
+      - /tmp:size=1G,mode=1777
+      - /run:size=100M,mode=0755
+      - /home/labuser/.cache:size=500M,uid=1000,gid=1000
+    networks:
+      - guacamole-network
+    ports:
+      - "5902:5901"
+    volumes:
+      - cyber-lab-data:/home/labuser/workspace
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+          pids: 512
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # MIS Lab Container
+  mis-lab:
+    build:
+      context: ./mis-lab
+      dockerfile: Dockerfile
+    image: virtual-lab/mis-lab:latest
+    container_name: mis-lab-1
+    hostname: mis-lab-1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    read_only: true
+    tmpfs:
+      - /tmp:size=1G,mode=1777
+      - /run:size=100M,mode=0755
+      - /home/labuser/.cache:size=500M,uid=1000,gid=1000
+    networks:
+      - guacamole-network
+    ports:
+      - "5903:5901"
+    volumes:
+      - mis-lab-data:/home/labuser/workspace
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+          pids: 512
+        reservations:
+          cpus: '1'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  guacamole-network:
+    driver: bridge
+
+volumes:
+  guacamole-db-data:
+  ai-lab-data:
+  cyber-lab-data:
+  mis-lab-data:
+  mongodb-data:
+
+

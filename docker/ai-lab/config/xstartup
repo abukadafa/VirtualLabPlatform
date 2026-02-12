@@ -1,0 +1,11 @@
+#!/bin/bash
+# VNC xstartup script for XFCE desktop
+
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Set background color
+xsetroot -solid grey
+
+# Start XFCE desktop
+startxfce4 &

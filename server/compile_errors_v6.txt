@@ -1,0 +1,18 @@
+src/models/Booking.model.ts(3,18): error TS2430: Interface 'IBooking' incorrectly extends interface 'Document<ObjectId, any, any, Record<string, any>, {}>'.
+  Types of property '_id' are incompatible.
+    Type 'string' is not assignable to type 'ObjectId'.
+src/models/User.model.ts(4,18): error TS2430: Interface 'IUser' incorrectly extends interface 'Document<ObjectId, any, any, Record<string, any>, {}>'.
+  Types of property '_id' are incompatible.
+    Type 'string' is not assignable to type 'ObjectId'.
+src/models/User.model.ts(57,46): error TS2349: This expression is not callable.
+  Type 'SaveOptions' has no call signatures.
+src/models/User.model.ts(61,43): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(password: string, salt: string | number): Promise<string>', gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string'.
+  Overload 2 of 2, '(password: string, salt: string | number, callback?: Callback<string> | undefined, progressCallback?: ProgressCallback | undefined): void', gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string'.
+src/models/User.model.ts(62,9): error TS2349: This expression is not callable.
+  Type 'SaveOptions' has no call signatures.
+src/models/User.model.ts(64,9): error TS2349: This expression is not callable.
+  Type 'SaveOptions' has no call signatures.
+src/services/background-jobs.service.ts(11,19): error TS2503: Cannot find namespace 'cron'.
