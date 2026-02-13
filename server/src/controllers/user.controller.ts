@@ -28,7 +28,7 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
 // Update user (Admin only)
 export const updateUser = async (req: AuthRequest, res: Response) => {
     try {
-        const { username, password, ...updates } = req.body;
+        const { username, password, programmes, ...updates } = req.body;
 
         const user = await User.findById(req.params.id);
         if (!user) {
@@ -47,6 +47,11 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         // Handle password update
         if (password) {
             user.password = password;
+        }
+
+        // Handle programmes update
+        if (programmes) {
+            user.programmes = programmes;
         }
 
         // Handle other updates
@@ -77,7 +82,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
 // Create single user (Admin only)
 export const createUser = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, username, email, password, role, programme, studentId } = req.body;
+        const { name, username, email, password, role, programmes, studentId } = req.body;
 
         const userExists = await User.findOne({ $or: [{ email }, { username }] });
         if (userExists) {
@@ -90,7 +95,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
             email,
             password: password || 'Welcome123', // Default password
             role: role || 'student',
-            programme,
+            programmes: programmes || [],
             studentId,
             status: 'enrolled'
         });
@@ -133,6 +138,7 @@ export const bulkCreateUsers = async (req: AuthRequest, res: Response) => {
 
                 const user = new User({
                     ...userData,
+                    programmes: userData.programmes || (userData.programme ? [userData.programme] : []),
                     password: userData.password || defaultPassword || 'Welcome123',
                     status: 'enrolled'
                 });

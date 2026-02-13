@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import SystemSettings from '../components/SystemSettings';
 import {
     Users,
     Calendar,
@@ -23,7 +24,8 @@ import {
     Award,
     TrendingUp,
     Activity,
-    Star
+    Star,
+    Settings as SettingsIcon
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -34,7 +36,7 @@ interface User {
     email: string;
     role: string;
     status: 'enrolled' | 'completed' | 'inactive';
-    programme?: string;
+    programmes: string[];
     studentId?: string;
 }
 
@@ -51,7 +53,7 @@ interface Booking {
 
 interface Submission {
     _id: string;
-    student: { _id: string; name: string; email: string; programme?: string };
+    student: { _id: string; name: string; email: string; programmes?: string[] };
     lab: { _id: string; name: string; type: string };
     files: { name: string; path: string; size: number; mimeType: string }[];
     submittedAt: string;
@@ -78,7 +80,7 @@ const PROGRAMMES = [
 const AdminManagement: React.FC = () => {
     const { token } = useAuth();
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState<'users' | 'bookings' | 'analytics' | 'submissions'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'bookings' | 'analytics' | 'submissions' | 'settings'>('users');
     const [users, setUsers] = useState<User[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ const AdminManagement: React.FC = () => {
     const [editFormData, setEditFormData] = useState({
         username: '',
         password: '',
-        programme: PROGRAMMES[0]
+        programmes: [] as string[]
     });
 
     // Extension Modal State
@@ -118,7 +120,7 @@ const AdminManagement: React.FC = () => {
         email: '',
         role: 'student',
         password: '',
-        programme: PROGRAMMES[0],
+        programmes: [] as string[],
         studentId: ''
     });
 
@@ -282,7 +284,7 @@ const AdminManagement: React.FC = () => {
             const data = await response.json();
             if (response.ok) {
                 setIsModalOpen(false);
-                setFormData({ name: '', username: '', email: '', role: 'student', password: '', programme: PROGRAMMES[0], studentId: '' });
+                setFormData({ name: '', username: '', email: '', role: 'student', password: '', programmes: [PROGRAMMES[0]], studentId: '' });
                 fetchData();
             } else {
                 setError(data.message || 'Failed to add user');
@@ -347,7 +349,7 @@ const AdminManagement: React.FC = () => {
             const data = await response.json();
             if (response.ok) {
                 setIsEditModalOpen(false);
-                setEditFormData({ username: '', password: '', programme: PROGRAMMES[0] });
+                setEditFormData({ username: '', password: '', programmes: [PROGRAMMES[0]] });
                 fetchData();
             } else {
                 setError(data.message || 'Failed to update credentials');
@@ -411,6 +413,13 @@ const AdminManagement: React.FC = () => {
                         >
                             <BarChart3 className="w-4 h-4 inline mr-2" />
                             Analytics
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('settings')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'settings' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
+                        >
+                            <SettingsIcon className="w-4 h-4 inline mr-2" />
+                            Settings
                         </button>
                     </div>
                 </div>
@@ -480,9 +489,17 @@ const AdminManagement: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="text-sm font-medium text-blue-400">
-                                                {user.programme || 'N/A'}
-                                            </span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {user.programmes && user.programmes.length > 0 ? (
+                                                    user.programmes.map(p => (
+                                                        <span key={p} className="text-[10px] font-medium px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/20">
+                                                            {p}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span className="text-sm text-slate-500 italic text-slate-500">N/A</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold ${user.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'}`}>
@@ -502,7 +519,7 @@ const AdminManagement: React.FC = () => {
                                                         setEditFormData({
                                                             username: user.username,
                                                             password: '',
-                                                            programme: user.programme || PROGRAMMES[0]
+                                                            programmes: user.programmes || []
                                                         });
                                                         setIsEditModalOpen(true);
                                                         setError(null);
@@ -727,7 +744,7 @@ const AdminManagement: React.FC = () => {
                                         <td className="px-6 py-4">
                                             <div>
                                                 <div className="font-bold">{sub.student?.name || 'Unknown'}</div>
-                                                <div className="text-xs text-slate-400">{sub.student?.programme || sub.student?.email}</div>
+                                                <div className="text-xs text-slate-400">{(sub.student?.programmes && sub.student.programmes[0]) || sub.student?.email}</div>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -825,17 +842,26 @@ const AdminManagement: React.FC = () => {
                                     />
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-400 uppercase">Programme</label>
-                                    <select
-                                        value={editFormData.programme}
-                                        onChange={e => setEditFormData({ ...editFormData, programme: e.target.value })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    >
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Enrolled Programmes</label>
+                                    <div className="grid grid-cols-1 gap-2 bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl max-h-32 overflow-y-auto">
                                         {PROGRAMMES.map(p => (
-                                            <option key={p} value={p}>{p}</option>
+                                            <label key={p} className="flex items-center gap-3 cursor-pointer group">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editFormData.programmes.includes(p)}
+                                                    onChange={e => {
+                                                        const newProgrammes = e.target.checked
+                                                            ? [...editFormData.programmes, p]
+                                                            : editFormData.programmes.filter(item => item !== p);
+                                                        setEditFormData({ ...editFormData, programmes: newProgrammes });
+                                                    }}
+                                                    className="w-4 h-4 rounded border-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 bg-slate-800"
+                                                />
+                                                <span className="text-sm text-slate-300 group-hover:text-white transition">{p}</span>
+                                            </label>
                                         ))}
-                                    </select>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-1">
@@ -988,17 +1014,26 @@ const AdminManagement: React.FC = () => {
                                             placeholder="Default: Welcome123"
                                         />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-slate-400 uppercase">Programme</label>
-                                        <select
-                                            value={formData.programme}
-                                            onChange={e => setFormData({ ...formData, programme: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
+                                    <div className="space-y-2 md:col-span-2">
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Enrolled Programmes</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl">
                                             {PROGRAMMES.map(p => (
-                                                <option key={p} value={p}>{p}</option>
+                                                <label key={p} className="flex items-center gap-3 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.programmes.includes(p)}
+                                                        onChange={e => {
+                                                            const newProgrammes = e.target.checked
+                                                                ? [...formData.programmes, p]
+                                                                : formData.programmes.filter(item => item !== p);
+                                                            setFormData({ ...formData, programmes: newProgrammes });
+                                                        }}
+                                                        className="w-4 h-4 rounded border-slate-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900 bg-slate-800"
+                                                    />
+                                                    <span className="text-sm text-slate-300 group-hover:text-white transition">{p}</span>
+                                                </label>
                                             ))}
-                                        </select>
+                                        </div>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-xs font-bold text-slate-400 uppercase">Student ID / Service Number</label>
@@ -1257,6 +1292,9 @@ const AdminManagement: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && <SystemSettings />}
         </div>
     );
 };

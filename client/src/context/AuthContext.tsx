@@ -7,7 +7,7 @@ interface User {
     role: 'student' | 'facilitator' | 'admin';
     department?: string;
     studentId?: string;
-    programme?: string;
+    programmes?: string[];
 }
 
 interface AuthContextType {

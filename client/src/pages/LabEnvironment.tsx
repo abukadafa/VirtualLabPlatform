@@ -11,7 +11,9 @@ import {
     RefreshCw,
     Maximize2,
     Users,
+    ClipboardCheck
 } from 'lucide-react';
+import AssignmentUpload from '../components/AssignmentUpload';
 
 interface Lab {
     _id: string;
@@ -52,6 +54,9 @@ const LabEnvironment: React.FC = () => {
     const [sessionData, setSessionData] = useState<SessionData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [assignments, setAssignments] = useState<any[]>([]);
+    const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+    const [showSubmissions, setShowSubmissions] = useState(false);
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -63,6 +68,7 @@ const LabEnvironment: React.FC = () => {
         fetchLabDetails();
         checkExistingSession();
         verifyAccess();
+        fetchLabAssignments();
 
         return () => {
             // Cleanup intervals on unmount
@@ -119,23 +125,20 @@ const LabEnvironment: React.FC = () => {
     const verifyAccess = async () => {
         if (!token || !user) return;
 
-        // Admin/Facilitator bypass
-        if (user.role === 'admin' || user.role === 'facilitator') {
-            return;
-        }
-
         try {
             const response = await fetch(`${API_URL}/api/bookings/my-bookings`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (response.ok) {
                 const bookings: any[] = await response.json();
-                const hasValidBooking = bookings.some(b =>
+                const activeBooking = bookings.find(b =>
                     b.lab._id === labId &&
                     (b.status === 'confirmed' || b.status === 'active')
                 );
 
-                if (!hasValidBooking) {
+                if (activeBooking) {
+                    setActiveBookingId(activeBooking._id);
+                } else if (user.role !== 'admin') {
                     setError('Access Denied. You do not have a confirmed booking for this lab.');
                     setSessionState('error');
                     setTimeout(() => navigate('/dashboard'), 3000);
@@ -143,8 +146,20 @@ const LabEnvironment: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to verify access:', error);
-            setError('Failed to verify booking status.');
-            setSessionState('error');
+        }
+    };
+
+    const fetchLabAssignments = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/assignments/lab/${labId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setAssignments(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch assignments:', error);
         }
     };
 
@@ -432,30 +447,80 @@ const LabEnvironment: React.FC = () => {
                     </div>
                 )}
 
-                {/* Active State - Guacamole Iframe */}
+                {/* Active State - Guacamole Iframe & Submission Sidebar */}
                 {sessionState === 'active' && sessionData?.guacamoleUrl && (
-                    <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden">
-                        <div className="bg-slate-900 p-3 border-b border-slate-700 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="flex gap-1.5">
-                                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)]">
+                        <div className={`flex-grow bg-slate-800/50 backdrop-blur-xl rounded-xl border border-slate-700/50 overflow-hidden transition-all duration-300 ${showSubmissions ? 'lg:w-2/3' : 'w-full'}`}>
+                            <div className="bg-slate-900 p-3 border-b border-slate-700 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex gap-1.5">
+                                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                        <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    </div>
+                                    <span className="text-slate-400 text-sm font-medium">
+                                        {lab.name} - Virtual Desktop
+                                    </span>
                                 </div>
-                                <span className="text-slate-400 text-sm font-medium">
-                                    {lab.name} - Virtual Desktop
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setShowSubmissions(!showSubmissions)}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${showSubmissions
+                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                                            : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                                            }`}
+                                    >
+                                        <ClipboardCheck className="w-4 h-4" />
+                                        {showSubmissions ? 'Hide Submission' : 'Submit Work'}
+                                    </button>
+                                    <button className="p-1.5 hover:bg-slate-700 rounded transition">
+                                        <Maximize2 className="w-4 h-4 text-slate-400" />
+                                    </button>
+                                </div>
                             </div>
-                            <button className="p-1.5 hover:bg-slate-700 rounded transition">
-                                <Maximize2 className="w-4 h-4 text-slate-400" />
-                            </button>
+                            <iframe
+                                src={sessionData.guacamoleUrl}
+                                className="w-full h-full bg-black border-none"
+                                title="Lab Environment"
+                                allow="clipboard-read; clipboard-write; fullscreen"
+                            />
                         </div>
-                        <iframe
-                            src={sessionData.guacamoleUrl}
-                            className="w-full h-[calc(100vh-16rem)] bg-black"
-                            title="Lab Environment"
-                            allow="clipboard-read; clipboard-write"
-                        />
+
+                        {showSubmissions && (
+                            <div className="lg:w-1/3 bg-slate-800/30 backdrop-blur-xl rounded-xl border border-slate-700/50 p-6 overflow-y-auto animate-in slide-in-from-right duration-300">
+                                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                                    <ClipboardCheck className="w-6 h-6 text-blue-400" />
+                                    Assignment Submissions
+                                </h2>
+
+                                {assignments.length === 0 ? (
+                                    <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-700/50">
+                                        <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                                        <p className="text-slate-400 text-sm font-medium">No active assignments for this lab.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-8">
+                                        {assignments.map(assignment => (
+                                            <div key={assignment._id} className="space-y-4">
+                                                <div className="bg-slate-900/50 rounded-xl p-4 border border-blue-500/20">
+                                                    <h4 className="text-blue-400 font-bold">{assignment.title}</h4>
+                                                    <p className="text-slate-400 text-xs mt-1 line-clamp-2">{assignment.description}</p>
+                                                    <div className="flex items-center gap-2 mt-3 text-[10px] font-bold text-slate-500 uppercase">
+                                                        <Clock className="w-3 h-3" />
+                                                        Deadline: {new Date(assignment.deadline).toLocaleString()}
+                                                    </div>
+                                                </div>
+
+                                                <AssignmentUpload
+                                                    assignmentId={assignment._id}
+                                                    bookingId={activeBookingId || ''}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 

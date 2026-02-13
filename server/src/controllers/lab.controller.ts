@@ -11,18 +11,8 @@ export const getAllLabs = async (req: AuthRequest, res: Response) => {
     try {
         const query: any = { status: 'active' };
 
-        // Filter for facilitators based on their programme
-        if (req.user?.role === 'facilitator' && req.user.programme) {
-            const programmeMap: Record<string, string> = {
-                'Artificial Intelligence': 'AI',
-                'Cybersecurity': 'Cybersecurity',
-                'Management Information System': 'MIS'
-            };
-            const labType = programmeMap[req.user.programme];
-            if (labType) {
-                query.type = labType;
-            }
-        }
+        // Show all active labs for all roles
+        // Restrictions are handled at the booking level
 
         const labs = await Lab.find(query);
         res.json(labs);

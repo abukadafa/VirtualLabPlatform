@@ -1,28 +1,40 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import {
-    submitWork,
-    getSubmissions,
-    postResult,
-    getMyResults,
-    getAnalytics
+    getUploadUrl,
+    confirmSubmission,
+    getSubmissionHistory,
+    prepareBulkDownload,
+    gradeSubmission,
+    mockUpload
 } from '../controllers/submission.controller';
 
 const router = express.Router();
 
-// Student submits work
-router.post('/submit', authenticate, submitWork);
+// --- Student Endpoints ---
 
-// Student views their graded results
-router.get('/my-results', authenticate, getMyResults);
+// Get signed URL for direct upload
+router.post('/upload-url', authenticate, getUploadUrl);
 
-// Admin/Facilitator gets all submissions
-router.get('/all', authenticate, authorize('admin', 'facilitator'), getSubmissions);
+// Confirm submission after upload
+router.post('/confirm', authenticate, confirmSubmission);
 
-// Admin/Facilitator analytics dashboard data
-router.get('/analytics', authenticate, authorize('admin', 'facilitator'), getAnalytics);
+// Get submission history for an assignment
+router.get('/history/:assignmentId', authenticate, getSubmissionHistory);
 
-// Admin/Facilitator grades a submission
-router.patch('/grade/:submissionId', authenticate, authorize('admin', 'facilitator'), postResult);
+
+// --- Facilitator/Admin Endpoints ---
+
+// Bulk download submissions
+router.post('/bulk-download', authenticate, authorize('admin', 'facilitator'), prepareBulkDownload);
+
+// Grade and lock a submission
+router.patch('/grade/:submissionId', authenticate, authorize('admin', 'facilitator'), gradeSubmission);
+
+
+// --- Development/Mock Endpoints ---
+
+// Mock upload endpoint (simulating S3 for local dev)
+router.put('/upload-mock', mockUpload);
 
 export default router;

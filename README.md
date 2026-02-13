@@ -28,13 +28,40 @@ A comprehensive cloud-based virtual laboratory platform for ACETEL postgraduate 
 - TailwindCSS for styling
 - Lucide React for icons
 
-## Getting Started
+- Lucide React for icons
 
-### Prerequisites
+## Development Setup
+
+You can run the project either via Docker (recommended) or manually on your local machine.
+
+### Option 1: Docker Development (Recommended)
+
+1. **Prerequisites**
+   - Docker Desktop installed and running
+
+2. **Start the Application**
+   ```bash
+   cd docker
+   docker compose -f docker-compose.dev.yml up --build
+   ```
+
+3. **Seed the Database** (Run in a new terminal)
+   - This populates the database with default users and labs.
+   ```bash
+   docker exec -it virtuallab-server npm run seed
+   ```
+
+4. **Access Application**
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:5000
+
+### Option 2: Local Manual Setup
+
+#### Prerequisites
 - Node.js (v16+)
 - MongoDB (local or cloud instance)
 
-### Installation
+#### Installation
 
 1. **Clone & navigate to project**
 ```bash

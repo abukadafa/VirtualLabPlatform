@@ -9,8 +9,15 @@ import labRoutes from './routes/lab.routes';
 import bookingRoutes from './routes/booking.routes';
 import userRoutes from './routes/user.routes';
 import submissionRoutes from './routes/submission.routes';
+import assignmentRoutes from './routes/assignment.routes';
+import settingsRoutes from './routes/settings.routes';
+import { initNotifications } from './services/notification.service';
+import { apiRateLimit, authRateLimit } from './middleware/rate-limit.middleware';
 
 dotenv.config();
+
+// Initialize services
+initNotifications();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -21,27 +28,9 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate Limiting - General API
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'Too many requests, please try again later.' }
-});
-
-// Rate Limiting - Auth (stricter)
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { message: 'Too many login attempts. Please try again later.' }
-});
-
 // Apply rate limiters
-app.use('/api/', apiLimiter);
-app.use('/api/auth', authLimiter);
+app.use('/api', apiRateLimit); // Removed trailing slash
+app.use('/api/auth', authRateLimit);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -49,6 +38,8 @@ app.use('/api/labs', labRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/submissions', submissionRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

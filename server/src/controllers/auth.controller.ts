@@ -1,12 +1,14 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import User from '../models/User.model';
 import { AuthRequest } from '../middleware/auth.middleware';
+import emailService from '../services/email.service';
 
 // Register a new user
 export const register = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, username, email, password, role, programme, studentId } = req.body;
+        const { name, username, email, password, role, programmes, studentId } = req.body;
 
         // Check if user already exists
         const userExists = await User.findOne({
@@ -26,7 +28,7 @@ export const register = async (req: AuthRequest, res: Response) => {
             email,
             password,
             role: role || 'student',
-            programme,
+            programmes: programmes || [],
             studentId,
         });
 
@@ -34,10 +36,17 @@ export const register = async (req: AuthRequest, res: Response) => {
 
         // Generate token
         const token = jwt.sign(
-            { id: user._id, role: user.role, programme: user.programme },
+            { id: user._id, role: user.role, programmes: user.programmes },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '7d' }
         );
+
+        // Send welcome email
+        try {
+            await emailService.sendEmail(user.email, 'welcome', { name: user.name });
+        } catch (emailError) {
+            console.error('Failed to send welcome email:', emailError);
+        }
 
         res.status(201).json({
             token,
@@ -46,7 +55,7 @@ export const register = async (req: AuthRequest, res: Response) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                programme: user.programme,
+                programmes: user.programmes,
                 studentId: user.studentId,
             },
         });
@@ -90,7 +99,7 @@ export const login = async (req: AuthRequest, res: Response) => {
 
         // Generate token
         const token = jwt.sign(
-            { id: user._id, role: user.role, programme: user.programme },
+            { id: user._id, role: user.role, programmes: user.programmes },
             process.env.JWT_SECRET || 'your-secret-key',
             { expiresIn: '7d' }
         );
@@ -102,7 +111,7 @@ export const login = async (req: AuthRequest, res: Response) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                programme: user.programme,
+                programmes: user.programmes,
                 studentId: user.studentId,
             },
         });
@@ -121,5 +130,78 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         res.json(user);
     } catch (error: any) {
         res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Forgot Password - Generate reset token and send email
+export const forgotPassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const { email } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'No user found with that email address' });
+        }
+
+        // Generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+        user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour
+
+        await user.save();
+
+        // Create reset URL
+        const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
+
+        // Send email
+        try {
+            await emailService.sendEmail(user.email, 'password_reset', {
+                name: user.name,
+                resetLink: resetUrl
+            });
+
+            res.json({ message: 'Password reset email sent successfully' });
+        } catch (emailError) {
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpires = undefined;
+            await user.save();
+            throw emailError;
+        }
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error sending password reset email', error: error.message });
+    }
+};
+
+// Reset Password - Validate token and update password
+export const resetPassword = async (req: AuthRequest, res: Response) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        if (!password || password.length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters' });
+        }
+
+        // Hash the token from URL to compare with stored hash
+        const hashedToken = crypto.createHash('sha256').update(String(token)).digest('hex');
+
+        const user = await User.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: 'Invalid or expired reset token' });
+        }
+
+        // Update password
+        user.password = password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        res.json({ message: 'Password reset successful' });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error resetting password', error: error.message });
     }
 };

@@ -8,10 +8,12 @@ export interface IUser extends Document {
     password: string;
     role: 'student' | 'facilitator' | 'admin';
     status: 'enrolled' | 'completed' | 'inactive';
-    programme?: string;
+    programmes: string[];
     studentId?: string;
     lastEnrollmentDate?: Date;
     completionDate?: Date;
+    resetPasswordToken?: string;
+    resetPasswordExpires?: Date;
     createdAt: Date;
     updatedAt: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -53,11 +55,13 @@ const UserSchema: Schema = new Schema(
             enum: ['enrolled', 'completed', 'inactive'],
             default: 'enrolled',
         },
-        programme: {
-            type: String,
-            enum: ['Artificial Intelligence', 'Cybersecurity', 'Management Information System'],
-            trim: true,
-        },
+        programmes: [
+            {
+                type: String,
+                enum: ['Artificial Intelligence', 'Cybersecurity', 'Management Information System'],
+                trim: true,
+            },
+        ],
         studentId: {
             type: String,
             trim: true,
@@ -67,6 +71,12 @@ const UserSchema: Schema = new Schema(
             default: Date.now,
         },
         completionDate: {
+            type: Date,
+        },
+        resetPasswordToken: {
+            type: String,
+        },
+        resetPasswordExpires: {
             type: Date,
         },
     },

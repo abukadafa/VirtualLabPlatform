@@ -17,7 +17,8 @@ import {
     Loader2,
     Award,
     MessageSquare,
-    FileCheck
+    FileCheck,
+    Info
 } from 'lucide-react';
 
 interface Lab {
@@ -57,7 +58,7 @@ const Dashboard: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [pendingSubmissions, setPendingSubmissions] = useState(0);
     const [selectedProgramme, setSelectedProgramme] = useState<string | null>(
-        user?.programme || null
+        user?.programmes && user.programmes.length > 0 ? user.programmes[0] : null
     );
 
     // Booking Modal State
@@ -229,7 +230,7 @@ const Dashboard: React.FC = () => {
     }
 
 
-    // Filter labs based on student's programme and active status
+    // Filter labs based on user's programmes and active status
     const filteredLabs = labs.filter((lab) => {
         // For students: match selected programme and only show active labs
         if (user?.role === 'student') {
@@ -238,7 +239,13 @@ const Dashboard: React.FC = () => {
                 : false;
             return programmeMatch && lab.status === 'active';
         }
-        // For facilitators/admin: show all labs
+
+        // For facilitators and admins: show all labs
+        if (user?.role === 'facilitator' || user?.role === 'admin') {
+            return true;
+        }
+
+        // For admin: show all labs
         return true;
     });
 
@@ -386,9 +393,49 @@ const Dashboard: React.FC = () => {
                     )
                 }
 
+                {/* Programme Display - Facilitators Only */}
+                {
+                    user?.role === 'facilitator' && (
+                        <div className="mb-8">
+                            <h2 className="text-xl font-bold text-white mb-4">Your Assigned Programmes</h2>
+                            <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
+                                <div className="flex flex-wrap gap-4">
+                                    {user.programmes?.map((prog) => (
+                                        <div
+                                            key={prog}
+                                            className={`
+                                            px-6 py-4 rounded-xl border flex items-center gap-3 transition-all
+                                            ${prog === 'Artificial Intelligence' ? 'bg-blue-500/10 border-blue-500/30' : ''}
+                                            ${prog === 'Cybersecurity' ? 'bg-red-500/10 border-red-500/30' : ''}
+                                            ${prog === 'Management Information System' ? 'bg-green-500/10 border-green-500/30' : ''}
+                                        `}>
+                                            {prog === 'Artificial Intelligence' && <Cpu className="w-6 h-6 text-blue-400" />}
+                                            {prog === 'Cybersecurity' && <Shield className="w-6 h-6 text-red-400" />}
+                                            {prog === 'Management Information System' && <Database className="w-6 h-6 text-green-400" />}
+                                            <span className="font-bold text-white uppercase tracking-wider text-xs">{prog}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-4 flex items-center gap-2 text-slate-400 text-sm italic">
+                                    <Info className="w-4 h-4" />
+                                    <span>You are restricted to labs and submissions within these assigned programmes.</span>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+
                 {/* Labs Section */}
                 <div className="mb-8">
-                    <h2 className="text-xl font-bold text-white mb-4">Available Virtual Labs</h2>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                        <h2 className="text-xl font-bold text-white">Available Virtual Labs</h2>
+                        {user?.role === 'facilitator' && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/30 rounded-full">
+                                <Calendar className="w-4 h-4 text-blue-400" />
+                                <span className="text-xs font-semibold text-blue-400">BOOKING REQUIRED FOR ACCESS</span>
+                            </div>
+                        )}
+                    </div>
                     {isLoading ? (
                         <div className="text-center text-slate-400 py-12">Loading labs...</div>
                     ) : filteredLabs.length === 0 ? (
@@ -406,7 +453,7 @@ const Dashboard: React.FC = () => {
                                     b.lab._id === lab._id &&
                                     (b.status === 'confirmed' || b.status === 'active')
                                 );
-                                const canLaunch = user?.role !== 'student' || hasActiveBooking;
+                                const canLaunch = user?.role === 'admin' || hasActiveBooking;
 
                                 return (
                                     <div
