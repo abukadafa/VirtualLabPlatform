@@ -60,7 +60,7 @@ class DockerService {
         const imageName = this.getImageName(config.labType);
 
         // Determine network mode based on internet setting
-        const networkMode = config.internetEnabled ? 'lab-network' : 'lab-network-isolated';
+        const networkMode = 'docker_internal-network'; // Match docker-compose project prefix
 
         const container = await docker.createContainer({
             Image: imageName,

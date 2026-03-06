@@ -2,6 +2,7 @@ import { Response } from 'express';
 import Booking from '../models/Booking.model';
 import Lab from '../models/Lab.model';
 import { AuthRequest } from '../middleware/auth.middleware';
+import emailService from '../services/email.service';
 
 // Create a booking
 export const createBooking = async (req: AuthRequest, res: Response) => {
@@ -12,6 +13,23 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         const labExists = await Lab.findById(lab);
         if (!labExists) {
             return res.status(404).json({ message: 'Lab not found' });
+        }
+
+        // Check if user is authorized for this lab type based on their programme
+        if (req.user && req.user.role !== 'admin') {
+            const userProgrammes = req.user.programmes || [];
+            const typeMapping: { [key: string]: string } = {
+                'Artificial Intelligence': 'AI',
+                'Cybersecurity': 'Cybersecurity',
+                'Management Information System': 'MIS'
+            };
+            const allowedTypes = userProgrammes.map(p => typeMapping[p]).filter(Boolean);
+            
+            if (!allowedTypes.includes(labExists.type)) {
+                return res.status(403).json({ 
+                    message: `Access denied. This lab is for ${labExists.type} students only.` 
+                });
+            }
         }
 
         // Check for conflicts and capacity
@@ -85,18 +103,101 @@ export const getAllBookings = async (req: AuthRequest, res: Response) => {
 // Cancel booking
 export const cancelBooking = async (req: AuthRequest, res: Response) => {
     try {
-        const booking = await Booking.findById(req.params.id);
+        const booking = await Booking.findById(req.params.id).populate('user lab');
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
         // Check if user owns the booking or is admin
-        if (booking.user.toString() !== req.user?.id && req.user?.role !== 'admin') {
+        if (booking.user._id.toString() !== req.user?.id && req.user?.role !== 'admin') {
             return res.status(403).json({ message: 'Not authorized' });
         }
 
         booking.status = 'cancelled';
         await booking.save();
+
+        // Send cancellation email
+        const user = booking.user as any;
+        const lab = booking.lab as any;
+        try {
+            await emailService.sendEmail(user.email, 'booking_cancelled', {
+                name: user.name,
+                labName: lab.name,
+                startTime: booking.startTime.toLocaleString(),
+                adminNote: 'Cancelled by user/admin'
+            });
+        } catch (emailErr) {
+            console.error('Failed to send cancellation email:', emailErr);
+        }
+
+        res.json(booking);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Request Lab Instance (Student)
+export const requestLabInstance = async (req: AuthRequest, res: Response) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // Verify ownership
+        if (booking.user.toString() !== req.user?.id) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        // Must be confirmed first
+        if (booking.status !== 'confirmed') {
+            return res.status(400).json({ message: 'Booking must be confirmed before requesting lab instance' });
+        }
+
+        booking.status = 'requested';
+        await booking.save();
+
+        res.json({ message: 'Lab instance requested. Admin will provision your access soon.', status: 'requested' });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Grant Lab Instance (Admin)
+export const grantLabInstance = async (req: AuthRequest, res: Response) => {
+    try {
+        const { provisionedUrl, adminNote } = req.body;
+        const booking = await Booking.findById(req.params.id).populate('user lab');
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        if (booking.status !== 'requested' && booking.status !== 'confirmed') {
+            return res.status(400).json({ message: 'Lab can only be granted for requested or confirmed bookings' });
+        }
+
+        booking.status = 'granted';
+        booking.provisionedUrl = provisionedUrl;
+        booking.provisionedAt = new Date();
+        if (adminNote) booking.adminNote = adminNote;
+
+        await booking.save();
+
+        // Notify user
+        const user = booking.user as any;
+        const lab = booking.lab as any;
+        try {
+            await emailService.sendEmail(user.email, 'booking_confirmed', {
+                name: user.name,
+                labName: lab.name,
+                startTime: booking.startTime.toLocaleString(),
+                endTime: booking.endTime.toLocaleString(),
+                adminNote: `Your lab instance is ready! Access it at: ${provisionedUrl}. ${adminNote || ''}`
+            });
+        } catch (emailErr) {
+            console.error('Failed to send grant email:', emailErr);
+        }
+
         res.json(booking);
     } catch (error: any) {
         res.status(500).json({ message: 'Server error', error: error.message });
@@ -106,15 +207,18 @@ export const cancelBooking = async (req: AuthRequest, res: Response) => {
 // Update booking (Admin/Facilitator only)
 export const updateBooking = async (req: AuthRequest, res: Response) => {
     try {
-        const { status, endTime, adminNote } = req.body;
+        const { status, endTime, adminNote, provisionedUrl } = req.body;
 
-        const booking = await Booking.findById(req.params.id);
+        const booking = await Booking.findById(req.params.id).populate('user lab');
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
+        const oldStatus = booking.status;
+
         if (status) {
-            if (!['confirmed', 'pending', 'cancelled', 'completed'].includes(status)) {
+            const validStatuses = ['confirmed', 'pending', 'cancelled', 'completed', 'requested', 'granted'];
+            if (!validStatuses.includes(status)) {
                 return res.status(400).json({ message: 'Invalid status' });
             }
             booking.status = status;
@@ -129,6 +233,11 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
             booking.adminNote = adminNote;
         }
 
+        if (provisionedUrl) {
+            booking.provisionedUrl = provisionedUrl;
+            booking.provisionedAt = new Date();
+        }
+
         if (endTime) {
             const newEndTime = new Date(endTime);
             if (newEndTime <= booking.startTime) {
@@ -139,6 +248,30 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
         }
 
         await booking.save();
+
+        // Send notification on status change
+        if (status && status !== oldStatus) {
+            const user = booking.user as any;
+            const lab = booking.lab as any;
+            let template = '';
+            if (status === 'confirmed') template = 'booking_confirmed';
+            else if (status === 'cancelled') template = 'booking_cancelled';
+            else if (status === 'completed') template = 'booking_completed';
+
+            if (template) {
+                try {
+                    await emailService.sendEmail(user.email, template, {
+                        name: user.name,
+                        labName: lab.name,
+                        startTime: booking.startTime.toLocaleString(),
+                        endTime: booking.endTime.toLocaleString(),
+                        adminNote: booking.adminNote
+                    });
+                } catch (emailErr) {
+                    console.error(`Failed to send ${template} email:`, emailErr);
+                }
+            }
+        }
 
         const populatedBooking = await Booking.findById(booking._id)
             .populate('lab', 'name type')

@@ -6,11 +6,18 @@ import { LogIn, Loader2 } from 'lucide-react';
 const LoginPage: React.FC = () => {
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'student' | 'facilitator' | 'admin'>('student');
+    const { login, user, branding } = useAuth();
+    const [role, setRole] = useState<string>('student');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const { login, user } = useAuth();
     const navigate = useNavigate();
+
+    // Update role default when branding roles are loaded
+    React.useEffect(() => {
+        if (branding?.roles && branding.roles.length > 0) {
+            setRole(branding.roles[0].name);
+        }
+    }, [branding]);
 
     // Redirect if already logged in
     React.useEffect(() => {
@@ -34,15 +41,25 @@ const LoginPage: React.FC = () => {
         }
     };
 
+    const roles = branding?.roles || [
+        { name: 'student' },
+        { name: 'facilitator' },
+        { name: 'admin' }
+    ];
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4">
             <div className="w-full max-w-md">
                 <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-700/50 p-8">
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500/20 rounded-full mb-4">
-                            <LogIn className="w-8 h-8 text-blue-400" />
-                        </div>
-                        <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+                        {branding?.logoUrl ? (
+                            <img src={branding.logoUrl} alt={branding.appName} className="h-16 mx-auto mb-4 object-contain" />
+                        ) : (
+                            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-500/20 rounded-full mb-4">
+                                <LogIn className="w-8 h-8 text-blue-400" />
+                            </div>
+                        )}
+                        <h1 className="text-3xl font-bold text-white mb-2">{branding?.appName || 'Welcome Back'}</h1>
                         <p className="text-slate-400">Sign in to access virtual labs</p>
                     </div>
 
@@ -87,15 +104,15 @@ const LoginPage: React.FC = () => {
                             <label htmlFor="role" className="block text-sm font-medium text-slate-300 mb-2">
                                 I am a...
                             </label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {(['student', 'facilitator', 'admin'] as const).map((r) => (
+                            <div className="flex flex-wrap gap-2">
+                                {roles.map((r) => (
                                     <button
-                                        key={r}
+                                        key={r.name}
                                         type="button"
-                                        onClick={() => setRole(r)}
-                                        className={`px-2 py-2 rounded-lg text-xs font-bold uppercase transition border ${role === r ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+                                        onClick={() => setRole(r.name)}
+                                        className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition border ${role === r.name ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
                                     >
-                                        {r}
+                                        {r.name}
                                     </button>
                                 ))}
                             </div>
@@ -104,7 +121,7 @@ const LoginPage: React.FC = () => {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-500/20"
+                            className="w-full bg-primary hover:bg-primary/80 text-white font-semibold py-3 rounded-lg transition duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-primary/20"
                         >
                             {isLoading ? (
                                 <>

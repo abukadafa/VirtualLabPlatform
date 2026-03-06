@@ -11,8 +11,26 @@ export const getAllLabs = async (req: AuthRequest, res: Response) => {
     try {
         const query: any = { status: 'active' };
 
-        // Show all active labs for all roles
-        // Restrictions are handled at the booking level
+        // If user is not admin, filter by their programme
+        if (req.user && req.user.role !== 'admin') {
+            const userProgrammes = req.user.programmes || [];
+            
+            // Map full programme names to lab types
+            const typeMapping: { [key: string]: string } = {
+                'Artificial Intelligence': 'AI',
+                'Cybersecurity': 'Cybersecurity',
+                'Management Information System': 'MIS'
+            };
+
+            const allowedTypes = userProgrammes.map(p => typeMapping[p]).filter(Boolean);
+            
+            if (allowedTypes.length > 0) {
+                query.type = { $in: allowedTypes as any };
+            } else {
+                // If user has no programmes, return no labs
+                query.type = { $in: [] };
+            }
+        }
 
         const labs = await Lab.find(query);
         res.json(labs);
@@ -96,21 +114,30 @@ export const startLab = async (req: AuthRequest, res: Response) => {
         const booking = await Booking.findOne({
             user: userId,
             lab: labId,
-            status: 'confirmed',
+            status: { $in: ['confirmed', 'granted', 'active'] },
             startTime: { $lte: now },
             endTime: { $gt: now }
         });
 
-        if (!booking && req.user?.role !== 'admin') {
-            return res.status(403).json({
-                message: 'Access denied. You do not have a confirmed booking for this lab at this time.'
-            });
-        }
+        const typeMapping: { [key: string]: string } = {
+            'Artificial Intelligence': 'AI',
+            'Cybersecurity': 'Cybersecurity',
+            'Management Information System': 'MIS'
+        };
 
         // Get lab details
         const lab = await Lab.findById(labId);
         if (!lab) {
             return res.status(404).json({ message: 'Lab not found' });
+        }
+
+        const userAllowedByProgramme = (req.user?.role === 'facilitator') && 
+            (req.user?.programmes || []).some(p => typeMapping[p] === lab.type);
+
+        if (!booking && req.user?.role !== 'admin' && !userAllowedByProgramme) {
+            return res.status(403).json({
+                message: 'Access denied. You do not have a confirmed booking or enrollment for this lab.'
+            });
         }
 
         // Create session

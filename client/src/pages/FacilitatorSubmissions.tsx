@@ -22,11 +22,14 @@ import {
     ShieldQuestion,
     RotateCcw
 } from 'lucide-react';
+import { API_URL } from '../lib/config';
 
 interface Submission {
     _id: string;
     student: { _id: string; name: string; email: string; programme: string };
     lab: { _id: string; name: string; type: string };
+    title: string;
+    description?: string;
     submittedAt: string;
     grade?: number;
     feedback?: string;
@@ -83,8 +86,7 @@ const FacilitatorSubmissions: React.FC = () => {
     const [gradeData, setGradeData] = useState({ grade: '', feedback: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [gradingError, setGradingError] = useState<string | null>(null);
-
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const [gradingSuccess, setGradingSuccess] = useState<string | null>(null);
 
     useEffect(() => {
         if (user?.role !== 'facilitator' && user?.role !== 'admin') {
@@ -182,8 +184,12 @@ const FacilitatorSubmissions: React.FC = () => {
             );
 
             if (response.ok) {
-                setIsGradingModalOpen(false);
-                setGradeData({ grade: '', feedback: '' });
+                setGradingSuccess('Grade submitted successfully!');
+                setTimeout(() => {
+                    setIsGradingModalOpen(false);
+                    setGradingSuccess(null);
+                    setGradeData({ grade: '', feedback: '' });
+                }, 1500);
                 fetchSubmissions();
                 fetchAnalytics();
             } else {
@@ -290,8 +296,9 @@ const FacilitatorSubmissions: React.FC = () => {
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                                className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium"
                             >
+                                <TrendingUp className="w-4 h-4 text-purple-400" />
                                 Back to Dashboard
                             </button>
                             <button
@@ -465,6 +472,9 @@ const FacilitatorSubmissions: React.FC = () => {
                                             Student / Attempt
                                         </th>
                                         <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                            Task Info
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                                             Lab Environment
                                         </th>
                                         <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -492,16 +502,17 @@ const FacilitatorSubmissions: React.FC = () => {
                                                 </button>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white">
-                                                        {submission.student.name.charAt(0)}
+                                                <div>
+                                                    <div className="text-sm text-white font-bold">{submission.student.name}</div>
+                                                    <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                                        <RotateCcw className="w-3 h-3" /> Attempt #{submission.attemptNumber}
                                                     </div>
-                                                    <div>
-                                                        <div className="text-sm text-white font-bold">{submission.student.name}</div>
-                                                        <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                                                            <RotateCcw className="w-3 h-3" /> Attempt #{submission.attemptNumber}
-                                                        </div>
-                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm text-white font-medium">{submission.title || 'No Title'}</div>
+                                                <div className="text-[10px] text-slate-500 mt-1 truncate max-w-[150px]" title={submission.description}>
+                                                    {submission.description || 'No description'}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -586,11 +597,61 @@ const FacilitatorSubmissions: React.FC = () => {
                             </button>
                         </div>
 
+                        <div className="p-6 bg-slate-900/50 border-b border-slate-700">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Submission Details</h3>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <span className="text-xs text-slate-400">Title:</span>
+                                            <p className="text-sm font-bold text-white">{selectedSubmission.title || 'No Title'}</p>
+                                        </div>
+                                        {selectedSubmission.description && (
+                                            <div>
+                                                <span className="text-xs text-slate-400">Description:</span>
+                                                <p className="text-sm text-slate-300 leading-relaxed">{selectedSubmission.description}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Attached Files</h3>
+                                    <div className="space-y-2">
+                                        {selectedSubmission.files.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700">
+                                                <div className="flex items-center gap-3">
+                                                    <FileText className="w-5 h-5 text-blue-400" />
+                                                    <div>
+                                                        <p className="text-xs font-bold text-white truncate max-w-[150px]">{file.name}</p>
+                                                        <p className="text-[10px] text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => window.open(`${API_URL}/api/submissions/download/${selectedSubmission._id}/${idx}`, '_blank')}
+                                                    className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition"
+                                                    title="Download File"
+                                                >
+                                                    <Download className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <form onSubmit={handleGradeSubmit} className="p-6 space-y-4">
                             {gradingError && (
                                 <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-center gap-3 text-red-400 text-sm">
                                     <AlertCircle className="w-5 h-5 flex-shrink-0" />
                                     {gradingError}
+                                </div>
+                            )}
+
+                            {gradingSuccess && (
+                                <div className="p-4 bg-emerald-500/10 border border-emerald-500/50 rounded-xl flex items-center gap-3 text-emerald-400 text-sm">
+                                    <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                                    {gradingSuccess}
                                 </div>
                             )}
 

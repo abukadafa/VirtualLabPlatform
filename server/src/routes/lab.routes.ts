@@ -12,7 +12,7 @@ import {
     extendSession,
     getQueueStatus,
 } from '../controllers/lab.controller';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate, authorize, hasPermission } from '../middleware/auth.middleware';
 import { labStartRateLimit } from '../middleware/rate-limit.middleware';
 
 const router = express.Router();
@@ -20,9 +20,9 @@ const router = express.Router();
 // Lab CRUD endpoints
 router.get('/', authenticate, getAllLabs);
 router.get('/:id', authenticate, getLabById);
-router.post('/', authenticate, authorize('admin'), createLab);
-router.put('/:id', authenticate, authorize('admin'), updateLab);
-router.delete('/:id', authenticate, authorize('admin'), deleteLab);
+router.post('/', authenticate, hasPermission('manage_labs'), createLab);
+router.put('/:id', authenticate, hasPermission('manage_labs'), updateLab);
+router.delete('/:id', authenticate, hasPermission('manage_labs'), deleteLab);
 
 // Session management endpoints
 router.post('/:id/start', authenticate, labStartRateLimit, startLab);

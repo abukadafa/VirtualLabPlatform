@@ -1,21 +1,34 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { API_URL } from '../lib/config';
 
 interface User {
     id: string;
     name: string;
     email: string;
-    role: 'student' | 'facilitator' | 'admin';
+    role: string;
     department?: string;
     studentId?: string;
     programmes?: string[];
+    permissions?: string[];
+}
+
+interface Branding {
+    appName: string;
+    logoUrl: string;
+    faviconUrl: string;
+    primaryColor: string;
+    secondaryColor: string;
+    roles?: { name: string; color?: string; description?: string }[];
 }
 
 interface AuthContextType {
     user: User | null;
     token: string | null;
+    branding: Branding | null;
     login: (identifier: string, password: string, role: string) => Promise<void>;
     register: (userData: any) => Promise<void>;
     logout: () => void;
+    refreshBranding: () => Promise<void>;
     isLoading: boolean;
 }
 
@@ -24,11 +37,63 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+    const [branding, setBranding] = useState<Branding | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const applyBranding = (data: Branding) => {
+        if (!data) return;
+        
+        // Update title
+        if (data.appName) {
+            document.title = data.appName;
+        }
+
+        // Update Favicon
+        let favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement;
+        if (!favicon) {
+            favicon = document.createElement('link');
+            favicon.rel = 'icon';
+            document.head.appendChild(favicon);
+        }
+
+        if (data.faviconUrl) {
+            favicon.href = data.faviconUrl;
+            // Handle PNG vs ICO vs SVG
+            if (data.faviconUrl.endsWith('.png')) {
+                favicon.type = 'image/png';
+            } else if (data.faviconUrl.endsWith('.svg')) {
+                favicon.type = 'image/svg+xml';
+            } else {
+                favicon.type = 'image/x-icon';
+            }
+        }
+
+        // Apply dynamic CSS variables for colors
+        const root = document.documentElement;
+        if (data.primaryColor) {
+            root.style.setProperty('--primary-color', data.primaryColor);
+        }
+        if (data.secondaryColor) {
+            root.style.setProperty('--secondary-color', data.secondaryColor);
+        }
+    };
+
+    const fetchPublicSettings = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/settings/public`);
+            if (response.ok) {
+                const data = await response.json();
+                setBranding(data);
+                applyBranding(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch branding:', error);
+        }
+    };
 
     useEffect(() => {
+        fetchPublicSettings();
+        
         // Check if user is already logged in
         const checkAuth = async () => {
             const storedToken = localStorage.getItem('token');
@@ -105,8 +170,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('token');
     };
 
+    const refreshBranding = async () => {
+        await fetchPublicSettings();
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+        <AuthContext.Provider value={{ user, token, branding, login, register, logout, refreshBranding, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

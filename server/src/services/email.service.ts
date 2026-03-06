@@ -30,6 +30,34 @@ export class EmailService {
             'new_submission_alert': {
                 subject: 'New Submission: {{assignmentName}}',
                 body: 'A new submission has been received from {{studentName}} for the assignment "{{assignmentName}}".'
+            },
+            'feedback': {
+                subject: 'New Feedback: {{subject}}',
+                body: 'You have received new feedback from {{userName}} ({{userEmail}}).\n\nCategory: {{category}}\nSubject: {{subject}}\n\nMessage:\n{{message}}'
+            },
+            'feedback_confirmation': {
+                subject: 'Feedback Received: {{subject}}',
+                body: 'Hello {{name}},\n\nThank you for your feedback. We have received it and will review it soon.'
+            },
+            'booking_confirmed': {
+                subject: 'Lab Booking Confirmed: {{labName}}',
+                body: 'Hello {{name}},\n\nYour booking for "{{labName}}" from {{startTime}} to {{endTime}} has been CONFIRMED.\n\nAdmin Note: {{adminNote}}\n\nYou can now access the lab during your scheduled time.'
+            },
+            'booking_cancelled': {
+                subject: 'Lab Booking Cancelled/Denied: {{labName}}',
+                body: 'Hello {{name}},\n\nYour booking for "{{labName}}" scheduled for {{startTime}} has been CANCELLED or DENIED.\n\nReason/Note: {{adminNote}}\n\nIf you have questions, please contact the administrator.'
+            },
+            'booking_completed': {
+                subject: 'Lab Session Completed: {{labName}}',
+                body: 'Hello {{name}},\n\nYour lab session for "{{labName}}" has been marked as COMPLETED.\n\nWe hope you had a productive session!'
+            },
+            'submission_graded': {
+                subject: 'Assignment Graded: {{assignmentName}}',
+                body: 'Hello {{name}},\n\nYour submission for "{{assignmentName}}" has been graded.\n\nGrade: {{grade}}\nFeedback: {{feedback}}\n\nYou can view the details in your dashboard.'
+            },
+            'enrollment_notification': {
+                subject: 'Account Enrolled: Virtual Lab Platform',
+                body: 'Hello {{name}},\n\nYour account on the Virtual Lab Platform has been set to "{{status}}".\n\nRole: {{role}}\nProgrammes: {{programmes}}\n\nYou can now log in and access your assigned resources.'
             }
         };
 

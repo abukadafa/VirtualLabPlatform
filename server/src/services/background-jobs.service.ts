@@ -8,7 +8,7 @@ import resourceManagerService from '../services/resource-manager.service';
  */
 export class BackgroundJobs {
     private static instance: BackgroundJobs;
-    private jobs: ScheduledTask[] = [];
+    private jobs: any[] = [];
 
     private constructor() { }
 

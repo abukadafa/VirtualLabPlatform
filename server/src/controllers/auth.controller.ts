@@ -2,17 +2,28 @@ import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import User from '../models/User.model';
+import Role from '../models/Role.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import emailService from '../services/email.service';
 
-// Register a new user
+// Register a new user (Admin-only restricted)
 export const register = async (req: AuthRequest, res: Response) => {
     try {
+        // Restrict registration to authenticated administrators
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ 
+                message: 'Registration is restricted. Only administrators can create new accounts.' 
+            });
+        }
+
         const { name, username, email, password, role, programmes, studentId } = req.body;
+
+        const normalizedEmail = email?.toLowerCase().trim();
+        const normalizedUsername = username?.toLowerCase().trim();
 
         // Check if user already exists
         const userExists = await User.findOne({
-            $or: [{ email }, { username }]
+            $or: [{ email: normalizedEmail }, { username: normalizedUsername }]
         });
 
         if (userExists) {
@@ -41,11 +52,16 @@ export const register = async (req: AuthRequest, res: Response) => {
             { expiresIn: '7d' }
         );
 
-        // Send welcome email
+        // Send enrollment email
         try {
-            await emailService.sendEmail(user.email, 'welcome', { name: user.name });
+            await emailService.sendEmail(user.email, 'enrollment_notification', { 
+                name: user.name,
+                status: user.status,
+                role: user.role,
+                programmes: user.programmes.join(', ')
+            });
         } catch (emailError) {
-            console.error('Failed to send welcome email:', emailError);
+            console.error('Failed to send enrollment email:', emailError);
         }
 
         res.status(201).json({
@@ -69,9 +85,15 @@ export const login = async (req: AuthRequest, res: Response) => {
     try {
         const { identifier, password, role } = req.body;
 
+        if (!identifier) {
+            return res.status(400).json({ message: 'Email or username is required' });
+        }
+
+        const normalizedIdentifier = identifier.toLowerCase().trim();
+
         // Check if user exists
         const user = await User.findOne({
-            $or: [{ email: identifier }, { username: identifier }]
+            $or: [{ email: normalizedIdentifier }, { username: normalizedIdentifier }]
         });
 
         if (!user) {
@@ -89,10 +111,10 @@ export const login = async (req: AuthRequest, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Check enrollment status
-        if (user.status !== 'enrolled') {
+        // Check status (Admins bypass, others must be enrolled or completed)
+        if (user.role !== 'admin' && !['enrolled', 'completed'].includes(user.status)) {
             return res.status(403).json({
-                message: 'Your account is not currently enrolled. Please contact the administrator.',
+                message: `Your account status is '${user.status}'. Please contact the administrator.`,
                 status: user.status
             });
         }
@@ -104,6 +126,10 @@ export const login = async (req: AuthRequest, res: Response) => {
             { expiresIn: '7d' }
         );
 
+        // Fetch permissions for the role
+        const roleData = await Role.findOne({ name: user.role });
+        const permissions = roleData ? roleData.permissions : [];
+
         res.json({
             token,
             user: {
@@ -113,6 +139,7 @@ export const login = async (req: AuthRequest, res: Response) => {
                 role: user.role,
                 programmes: user.programmes,
                 studentId: user.studentId,
+                permissions
             },
         });
     } catch (error: any) {
@@ -127,7 +154,16 @@ export const getMe = async (req: AuthRequest, res: Response) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-        res.json(user);
+
+        // Fetch permissions for the role
+        const roleData = await Role.findOne({ name: user.role });
+        const permissions = roleData ? roleData.permissions : [];
+
+        res.json({
+            ...user.toObject(),
+            id: user._id,
+            permissions
+        });
     } catch (error: any) {
         res.status(500).json({ message: 'Server error', error: error.message });
     }

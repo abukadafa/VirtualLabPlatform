@@ -18,8 +18,10 @@ import {
     Award,
     MessageSquare,
     FileCheck,
-    Info
+    Info,
+    Play
 } from 'lucide-react';
+import { API_URL } from '../lib/config';
 
 interface Lab {
     _id: string;
@@ -39,6 +41,7 @@ interface Booking {
     status: string;
     purpose?: string;
     adminNote?: string;
+    provisionedUrl?: string;
 }
 
 interface GradedResult {
@@ -51,7 +54,7 @@ interface GradedResult {
 }
 
 const Dashboard: React.FC = () => {
-    const { user, logout, token } = useAuth();
+    const { user, logout, token, branding } = useAuth();
     const navigate = useNavigate();
     const [labs, setLabs] = useState<Lab[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
@@ -60,6 +63,10 @@ const Dashboard: React.FC = () => {
     const [selectedProgramme, setSelectedProgramme] = useState<string | null>(
         user?.programmes && user.programmes.length > 0 ? user.programmes[0] : null
     );
+
+    // ... inside return ...
+    // Search for <header ...>
+
 
     // Booking Modal State
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -74,7 +81,45 @@ const Dashboard: React.FC = () => {
         purpose: ''
     });
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    // Feedback Modal State
+    const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+    const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+    const [feedbackStatus, setFeedbackStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+    const [feedbackData, setFeedbackData] = useState({
+        subject: '',
+        category: 'General',
+        message: ''
+    });
+
+    const handleFeedbackSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsFeedbackSubmitting(true);
+        setFeedbackStatus(null);
+
+        try {
+            const response = await fetch(`${API_URL}/api/users/feedback`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(feedbackData)
+            });
+
+            if (response.ok) {
+                setFeedbackStatus({ type: 'success', message: 'Feedback submitted! Thank you.' });
+                setFeedbackData({ subject: '', category: 'General', message: '' });
+                setTimeout(() => setIsFeedbackModalOpen(false), 2000);
+            } else {
+                const data = await response.json();
+                setFeedbackStatus({ type: 'error', message: data.message || 'Failed to submit feedback' });
+            }
+        } catch (error) {
+            setFeedbackStatus({ type: 'error', message: 'Connection error' });
+        } finally {
+            setIsFeedbackSubmitting(false);
+        }
+    };
 
     useEffect(() => {
         fetchLabs();
@@ -134,6 +179,26 @@ const Dashboard: React.FC = () => {
             setBookingError('Connection error. Please try again.');
         } finally {
             setIsBookingSubmitting(false);
+        }
+    };
+
+    const handleRequestLab = async (bookingId: string) => {
+        try {
+            const response = await fetch(`${API_URL}/api/bookings/${bookingId}/request-instance`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                fetchBookings(); // Refresh bookings to show new status
+            } else {
+                const data = await response.json();
+                alert(data.message || 'Failed to request lab access');
+            }
+        } catch (error) {
+            console.error('Failed to request lab:', error);
         }
     };
 
@@ -251,8 +316,14 @@ const Dashboard: React.FC = () => {
 
     // Filter bookings - students only see confirmed/active bookings
     const displayBookings = user?.role === 'student'
-        ? bookings.filter(b => b.status === 'confirmed' || b.status === 'active' || b.status === 'completed')
+        ? bookings.filter(b => ['confirmed', 'requested', 'granted', 'active', 'completed'].includes(b.status))
         : bookings;
+
+    // Helper to check permissions
+    const hasPerm = (perm: string) => {
+        if (user?.role === 'admin') return true;
+        return user?.permissions?.includes(perm) || false;
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -260,34 +331,50 @@ const Dashboard: React.FC = () => {
             <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold text-white">Virtual Lab Platform</h1>
-                            <p className="text-slate-400 text-sm mt-1">
-                                Welcome back, <span className="text-white font-medium">{user?.name}</span>
-                            </p>
+                        <div className="flex items-center gap-4">
+                            {branding?.logoUrl ? (
+                                <img src={branding.logoUrl} alt={branding.appName} className="h-10 object-contain" />
+                            ) : (
+                                <div className="p-2 bg-blue-500/20 rounded-lg">
+                                    <Cpu className="w-6 h-6 text-blue-400" />
+                                </div>
+                            )}
+                            <div>
+                                <h1 className="text-2xl font-bold text-white">{branding?.appName || 'Virtual Lab Platform'}</h1>
+                                <p className="text-slate-400 text-sm">
+                                    Welcome back, <span className="text-white font-medium">{user?.name}</span>
+                                </p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-4">
                             <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-medium">
                                 {user?.role}
                             </span>
-                            {(user?.role === 'facilitator' || user?.role === 'admin') && (
+                            {hasPerm('view_submissions') && (
                                 <button
                                     onClick={() => navigate('/facilitator/submissions')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition shadow-lg shadow-purple-500/20"
+                                    className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-white rounded-lg transition shadow-lg shadow-secondary/20"
                                 >
                                     <FileCheck className="w-4 h-4" />
                                     Submissions
                                 </button>
                             )}
-                            {user?.role === 'admin' && (
+                            {hasPerm('manage_users') || hasPerm('manage_labs') || hasPerm('provision_labs') || hasPerm('manage_roles') || hasPerm('view_feedback') || hasPerm('view_analytics') || hasPerm('view_submissions') ? (
                                 <button
                                     onClick={() => navigate('/admin/management')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition shadow-lg shadow-blue-500/20"
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-lg transition shadow-lg shadow-primary/20"
                                 >
                                     <Settings className="w-4 h-4" />
                                     Manage
                                 </button>
-                            )}
+                            ) : null}
+                            <button
+                                onClick={() => (hasPerm('view_feedback') && user?.role !== 'student') ? navigate('/admin/management', { state: { activeTab: 'feedback' } }) : setIsFeedbackModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
+                            >
+                                <MessageSquare className="w-4 h-4" />
+                                Feedback
+                            </button>
                             <button
                                 onClick={logout}
                                 className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
@@ -305,8 +392,8 @@ const Dashboard: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-blue-500/20 rounded-lg">
-                                <BookOpen className="w-6 h-6 text-blue-400" />
+                            <div className="p-3 bg-primary/20 rounded-lg">
+                                <BookOpen className="w-6 h-6 text-primary" />
                             </div>
                             <div>
                                 <p className="text-slate-400 text-sm">Available Labs</p>
@@ -316,8 +403,8 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-green-500/20 rounded-lg">
-                                <Calendar className="w-6 h-6 text-green-400" />
+                            <div className="p-3 bg-primary/20 rounded-lg">
+                                <Calendar className="w-6 h-6 text-primary" />
                             </div>
                             <div>
                                 <p className="text-slate-400 text-sm">My Bookings</p>
@@ -328,8 +415,8 @@ const Dashboard: React.FC = () => {
                     {(user?.role === 'facilitator' || user?.role === 'admin') ? (
                         <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-orange-500/20 rounded-lg">
-                                    <FileCheck className="w-6 h-6 text-orange-400" />
+                                <div className="p-3 bg-secondary/20 rounded-lg">
+                                    <FileCheck className="w-6 h-6 text-secondary" />
                                 </div>
                                 <div>
                                     <p className="text-slate-400 text-sm">Pending Reviews</p>
@@ -340,8 +427,8 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-purple-500/20 rounded-lg">
-                                    <Clock className="w-6 h-6 text-purple-400" />
+                                <div className="p-3 bg-primary/20 rounded-lg">
+                                    <Clock className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
                                     <p className="text-slate-400 text-sm">Active Sessions</p>
@@ -365,7 +452,7 @@ const Dashboard: React.FC = () => {
                                     {['Artificial Intelligence', 'Cybersecurity', 'Management Information System'].map((prog) => (
                                         <label
                                             key={prog}
-                                            className={`cursor-pointer transition-all ${selectedProgramme === prog ? 'ring-2 ring-blue-500 rounded-xl transform scale-[1.02]' : 'opacity-70 hover:opacity-100'}`}
+                                            className={`cursor-pointer transition-all ${selectedProgramme === prog ? 'ring-2 ring-primary rounded-xl transform scale-[1.02]' : 'opacity-70 hover:opacity-100'}`}
                                         >
                                             <input
                                                 type="radio"
@@ -376,11 +463,11 @@ const Dashboard: React.FC = () => {
                                             />
                                             <div className={`
                                             h-full rounded-xl p-6 border flex flex-col items-center justify-center text-center gap-3
-                                            ${prog === 'Artificial Intelligence' ? 'bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border-blue-500/30' : ''}
+                                            ${prog === 'Artificial Intelligence' ? 'bg-gradient-to-br from-primary/20 to-cyan-500/20 border-primary/30' : ''}
                                             ${prog === 'Cybersecurity' ? 'bg-gradient-to-br from-red-500/20 to-orange-500/20 border-red-500/30' : ''}
                                             ${prog === 'Management Information System' ? 'bg-gradient-to-br from-green-500/20 to-emerald-500/20 border-green-500/30' : ''}
                                         `}>
-                                                {prog === 'Artificial Intelligence' && <Cpu className="w-8 h-8 text-blue-400" />}
+                                                {prog === 'Artificial Intelligence' && <Cpu className="w-8 h-8 text-primary" />}
                                                 {prog === 'Cybersecurity' && <Shield className="w-8 h-8 text-red-400" />}
                                                 {prog === 'Management Information System' && <Database className="w-8 h-8 text-green-400" />}
                                                 <h3 className="font-bold text-white text-sm">{prog}</h3>
@@ -451,9 +538,13 @@ const Dashboard: React.FC = () => {
                             {filteredLabs.map((lab) => {
                                 const hasActiveBooking = bookings.some(b =>
                                     b.lab._id === lab._id &&
-                                    (b.status === 'confirmed' || b.status === 'active')
+                                    ['confirmed', 'requested', 'granted', 'active'].includes(b.status)
                                 );
-                                const canLaunch = user?.role === 'admin' || hasActiveBooking;
+                                
+                                const isFacilitatorInProgramme = user?.role === 'facilitator' && 
+                                    user.programmes?.some(p => getProgrammeType(p) === lab.type);
+
+                                const canLaunch = user?.role === 'admin' || hasActiveBooking || isFacilitatorInProgramme;
 
                                 return (
                                     <div
@@ -476,25 +567,93 @@ const Dashboard: React.FC = () => {
                                         </div>
                                         <div className="mt-auto">
                                             {canLaunch ? (
-                                                <button
-                                                    onClick={() => navigate(`/lab/${lab._id}`)}
-                                                    className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold transition text-center flex items-center justify-center gap-2"
-                                                >
-                                                    <Cpu className="w-4 h-4" />
-                                                    Launch Lab
-                                                </button>
+                                                (() => {
+                                                    const relevantBooking = bookings.find(b => 
+                                                        b.lab._id === lab._id && 
+                                                        ['confirmed', 'requested', 'granted', 'active'].includes(b.status)
+                                                    );
+
+                                                    // Admin or user with granted/active session
+                                                    if (user?.role === 'admin' || (relevantBooking && (relevantBooking.status === 'granted' || relevantBooking.status === 'active'))) {
+                                                        return (
+                                                            <div className="flex flex-col gap-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (relevantBooking?.provisionedUrl) {
+                                                                            window.open(relevantBooking.provisionedUrl, '_blank');
+                                                                        } else {
+                                                                            navigate(`/lab/${lab._id}`);
+                                                                        }
+                                                                    }}
+                                                                    className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold transition text-center flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Cpu className="w-4 h-4" />
+                                                                    Launch Lab
+                                                                </button>
+                                                                {user?.role !== 'admin' && hasPerm('submit_assignments') && (relevantBooking?.status === 'confirmed' || relevantBooking?.status === 'requested' || relevantBooking?.status === 'granted' || relevantBooking?.status === 'active') && (
+                                                                    <button
+                                                                        onClick={() => window.open('https://elearn.nou.edu.ng/login/index.php', '_blank')}
+                                                                        className="w-full px-4 py-3 bg-secondary/20 hover:bg-secondary/30 text-secondary rounded-lg text-sm font-bold transition text-center flex items-center justify-center gap-2 border border-secondary/30"
+                                                                    >
+                                                                        <FileCheck className="w-4 h-4" />
+                                                                        Submit Lab Task
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    } else if (relevantBooking && relevantBooking.status === 'requested') {
+                                                        return (
+                                                            <div className="w-full px-4 py-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-lg text-sm font-bold text-center flex items-center justify-center gap-2">
+                                                                <Clock className="w-4 h-4" />
+                                                                Access Requested
+                                                            </div>
+                                                        );
+                                                    } else if (relevantBooking && relevantBooking.status === 'confirmed') {
+                                                        if (hasPerm('request_lab_instance')) {
+                                                            return (
+                                                                <button
+                                                                    onClick={() => handleRequestLab(relevantBooking._id)}
+                                                                    className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition shadow-lg shadow-emerald-500/20 text-center flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Play className="w-4 h-4" />
+                                                                    Request Lab Access
+                                                                </button>
+                                                            );
+                                                        } else {
+                                                            return (
+                                                                <div className="w-full px-4 py-3 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-lg text-sm font-bold text-center flex items-center justify-center gap-2">
+                                                                    <CheckCircle className="w-4 h-4" />
+                                                                    Booking Confirmed
+                                                                </div>
+                                                            );
+                                                        }
+                                                    } else if (hasPerm('view_labs')) {
+                                                        return (
+                                                            <button
+                                                                onClick={() => navigate(`/lab/${lab._id}`)}
+                                                                className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold transition text-center flex items-center justify-center gap-2"
+                                                            >
+                                                                <Cpu className="w-4 h-4" />
+                                                                Launch Lab
+                                                            </button>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()
                                             ) : (
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedLabForBooking(lab);
-                                                        setIsBookingModalOpen(true);
-                                                        setBookingError(null);
-                                                    }}
-                                                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition shadow-lg shadow-blue-500/20 text-center flex items-center justify-center gap-2"
-                                                >
-                                                    <Calendar className="w-4 h-4" />
-                                                    Book Session
-                                                </button>
+                                                hasPerm('book_labs') && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedLabForBooking(lab);
+                                                            setIsBookingModalOpen(true);
+                                                            setBookingError(null);
+                                                        }}
+                                                        className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold transition shadow-lg shadow-blue-500/20 text-center flex items-center justify-center gap-2"
+                                                    >
+                                                        <Calendar className="w-4 h-4" />
+                                                        Book Session
+                                                    </button>
+                                                )
                                             )}
                                         </div>
                                     </div>
@@ -531,7 +690,7 @@ const Dashboard: React.FC = () => {
                                                 Status
                                             </th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">
-                                                Message
+                                                Action
                                             </th>
                                         </tr>
                                     </thead>
@@ -547,18 +706,43 @@ const Dashboard: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-sm">
                                                     <span
-                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${booking.status === 'confirmed'
+                                                        className={`px-2 py-1 rounded-full text-xs font-medium ${booking.status === 'granted' || booking.status === 'active'
                                                             ? 'bg-green-500/20 text-green-400'
-                                                            : booking.status === 'active'
-                                                                ? 'bg-blue-500/20 text-blue-400'
-                                                                : 'bg-slate-500/20 text-slate-400'
+                                                            : booking.status === 'requested'
+                                                                ? 'bg-amber-500/20 text-amber-400'
+                                                                : booking.status === 'confirmed'
+                                                                    ? 'bg-blue-500/20 text-blue-400'
+                                                                    : 'bg-slate-500/20 text-slate-400'
                                                             }`}
                                                     >
                                                         {booking.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-slate-400">
-                                                    {booking.adminNote || '-'}
+                                                <td className="px-6 py-4 text-sm">
+                                                    {booking.status === 'granted' || booking.status === 'active' ? (
+                                                        <button 
+                                                            onClick={() => navigate(`/lab/${booking.lab._id}`)}
+                                                            className="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1"
+                                                        >
+                                                            <Play className="w-4 h-4" />
+                                                            Launch
+                                                        </button>
+                                                    ) : booking.status === 'confirmed' ? (
+                                                        <button 
+                                                            onClick={() => handleRequestLab(booking._id)}
+                                                            className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
+                                                        >
+                                                            <Play className="w-4 h-4" />
+                                                            Request
+                                                        </button>
+                                                    ) : booking.status === 'requested' ? (
+                                                        <span className="text-amber-400/50 flex items-center gap-1">
+                                                            <Clock className="w-4 h-4" />
+                                                            Pending
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-500 italic">No action</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -710,7 +894,7 @@ const Dashboard: React.FC = () => {
                                     <button
                                         type="submit"
                                         disabled={isBookingSubmitting}
-                                        className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                                        className="flex-1 px-4 py-3 bg-primary hover:bg-primary/80 disabled:bg-primary/50 text-white rounded-xl font-bold transition shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                                     >
                                         {isBookingSubmitting ? (
                                             <Loader2 className="w-5 h-5 animate-spin" />
@@ -727,6 +911,106 @@ const Dashboard: React.FC = () => {
                     </div>
                 )
             }
+
+            {/* Feedback Modal */}
+            {isFeedbackModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+                        onClick={() => setIsFeedbackModalOpen(false)}
+                    ></div>
+                    <div className="relative w-full max-w-lg bg-slate-800 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+                            <div>
+                                <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+                                    <MessageSquare className="w-5 h-5 text-blue-500" />
+                                    Send Feedback
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">We value your input to improve the platform</p>
+                            </div>
+                            <button
+                                onClick={() => setIsFeedbackModalOpen(false)}
+                                className="p-2 hover:bg-slate-700 rounded-lg transition"
+                            >
+                                <X className="w-5 h-5 text-slate-400" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleFeedbackSubmit} className="p-6 space-y-4">
+                            {feedbackStatus && (
+                                <div className={`p-4 rounded-xl flex items-center gap-3 text-sm ${feedbackStatus.type === 'success' ? 'bg-green-500/10 border border-green-500/50 text-green-400' : 'bg-red-500/10 border border-red-500/50 text-red-400'
+                                    }`}>
+                                    {feedbackStatus.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                                    {feedbackStatus.message}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Category</label>
+                                    <select
+                                        value={feedbackData.category}
+                                        onChange={e => setFeedbackData({ ...feedbackData, category: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-white"
+                                    >
+                                        <option value="General">General</option>
+                                        <option value="Technical Issue">Technical Issue</option>
+                                        <option value="Feature Request">Feature Request</option>
+                                        <option value="Content">Content</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Subject</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        placeholder="Brief summary"
+                                        value={feedbackData.subject}
+                                        onChange={e => setFeedbackData({ ...feedbackData, subject: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-white"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-400 uppercase">Message</label>
+                                <textarea
+                                    required
+                                    rows={4}
+                                    placeholder="Tell us what you think..."
+                                    value={feedbackData.message}
+                                    onChange={e => setFeedbackData({ ...feedbackData, message: e.target.value })}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-white resize-none"
+                                />
+                            </div>
+
+                            <div className="pt-4 flex gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsFeedbackModalOpen(false)}
+                                    className="flex-1 px-4 py-3 border border-slate-700 rounded-xl font-bold text-slate-300 hover:bg-slate-700 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isFeedbackSubmitting}
+                                    className="flex-1 px-4 py-3 bg-primary hover:bg-primary/80 disabled:bg-primary/50 text-white rounded-xl font-bold transition shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                                >
+                                    {isFeedbackSubmitting ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <Play className="w-5 h-5" />
+                                            Submit Feedback
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

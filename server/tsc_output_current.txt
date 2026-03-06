@@ -1,1 +1,0 @@
-﻿src/controllers/submission.controller.ts(20,21): error TS2339: Property 'student' does not exist on type 'Document<unknown, {}, IBooking, {}, DefaultSchemaOptions> & IBooking & Required<{ _id: ObjectId; }> & { ...; } & { ...; }'.

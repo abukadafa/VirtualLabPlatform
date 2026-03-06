@@ -1,4 +1,5 @@
-﻿services:
+version: '3.3'
+services:
   # PostgreSQL database for Guacamole
   guacamole-db:
     image: postgres:15
@@ -16,7 +17,7 @@
 
   # MongoDB for Application Data
   mongodb:
-    image: mongo:latest
+    image: mongo:4.4
     container_name: mongodb
     restart: unless-stopped
     ports:
@@ -47,7 +48,6 @@
       - guacamole-network
 
   # Redis for Queue Management
-
   redis:
     image: redis:alpine
     container_name: redis
@@ -97,7 +97,6 @@
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-
     cap_drop:
       - ALL
     cap_add:
@@ -105,7 +104,7 @@
       - SETUID
       - SETGID
       - DAC_OVERRIDE
-    read_only: true
+    # Removed read_only: true for compatibility
     tmpfs:
       - /tmp:size=1G,mode=1777
       - /run:size=100M,mode=0755
@@ -122,7 +121,6 @@
         limits:
           cpus: '2'
           memory: 4G
-          pids: 512
         reservations:
           cpus: '1'
           memory: 2G
@@ -143,7 +141,6 @@
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-
     cap_drop:
       - ALL
     cap_add:
@@ -153,7 +150,7 @@
       - DAC_OVERRIDE
       - NET_ADMIN
       - NET_RAW
-    read_only: true
+    # Removed read_only: true for compatibility
     tmpfs:
       - /tmp:size=1G,mode=1777
       - /run:size=100M,mode=0755
@@ -169,7 +166,6 @@
         limits:
           cpus: '2'
           memory: 4G
-          pids: 512
         reservations:
           cpus: '1'
           memory: 2G
@@ -190,7 +186,6 @@
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-
     cap_drop:
       - ALL
     cap_add:
@@ -198,7 +193,7 @@
       - SETUID
       - SETGID
       - DAC_OVERRIDE
-    read_only: true
+    # Removed read_only: true for compatibility
     tmpfs:
       - /tmp:size=1G,mode=1777
       - /run:size=100M,mode=0755
@@ -214,7 +209,6 @@
         limits:
           cpus: '2'
           memory: 4G
-          pids: 512
         reservations:
           cpus: '1'
           memory: 2G
@@ -234,5 +228,3 @@ volumes:
   cyber-lab-data:
   mis-lab-data:
   mongodb-data:
-
-

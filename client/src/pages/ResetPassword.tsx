@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, XCircle, Lock } from 'lucide-react';
+import { API_URL } from '../lib/config';
 
 const ResetPassword: React.FC = () => {
     const { token } = useParams<{ token: string }>();
@@ -9,8 +10,6 @@ const ResetPassword: React.FC = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import RoleManagement from './RoleManagement';
-import { Settings as SettingsIcon, Save, TestTube, CheckCircle, XCircle, Palette, Mail, Cloud, FileText, Shield } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Palette, Mail, Cloud, FileText, Shield } from 'lucide-react';
+import { API_URL } from '../lib/config';
 
 interface SystemSettings {
     general?: { appName: string; logoUrl: string; faviconUrl: string; primaryColor: string; secondaryColor: string };
@@ -11,14 +12,12 @@ interface SystemSettings {
 }
 
 const SystemSettings: React.FC = () => {
-    const { token } = useAuth();
+    const { token, refreshBranding } = useAuth();
     const [activeTab, setActiveTab] = useState<'general' | 'smtp' | 's3' | 'templates' | 'rbac'>('general');
     const [settings, setSettings] = useState<SystemSettings>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
     useEffect(() => {
         fetchSettings();
@@ -71,6 +70,9 @@ const SystemSettings: React.FC = () => {
 
             if (response.ok) {
                 setTestResult({ type: 'success', message: 'Settings saved successfully!' });
+                if (key === 'general') {
+                    await refreshBranding();
+                }
                 fetchSettings();
             } else {
                 setTestResult({ type: 'error', message: data.message || 'Failed to save settings' });

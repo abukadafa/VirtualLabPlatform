@@ -1,13 +1,16 @@
 import express from 'express';
-import { getSettings, updateSettings, testSMTP, testS3 } from '../controllers/settings.controller';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { getSettings, updateSettings, testSMTP, testS3, getPublicSettings } from '../controllers/settings.controller';
+import { authenticate, authorize, hasPermission } from '../middleware/auth.middleware';
 
 const router = express.Router();
 
-// All settings routes require admin authentication
-router.get('/', authenticate, authorize('admin'), getSettings);
-router.put('/', authenticate, authorize('admin'), updateSettings);
-router.post('/test-smtp', authenticate, authorize('admin'), testSMTP);
-router.post('/test-s3', authenticate, authorize('admin'), testS3);
+// Public branding settings
+router.get('/public', getPublicSettings);
+
+// All settings routes require manage_settings permission
+router.get('/', authenticate, hasPermission('manage_settings'), getSettings);
+router.put('/', authenticate, hasPermission('manage_settings'), updateSettings);
+router.post('/test-smtp', authenticate, hasPermission('manage_settings'), testSMTP);
+router.post('/test-s3', authenticate, hasPermission('manage_settings'), testS3);
 
 export default router;

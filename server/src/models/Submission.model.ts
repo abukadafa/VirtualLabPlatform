@@ -5,6 +5,8 @@ export interface ISubmission extends Document {
     assignment: mongoose.Types.ObjectId;
     lab: mongoose.Types.ObjectId;
     booking: mongoose.Types.ObjectId;
+    title: string;
+    description?: string;
     files: {
         name: string;
         storagePath: string;
@@ -37,9 +39,11 @@ export interface ISubmission extends Document {
 
 const SubmissionSchema: Schema = new Schema({
     student: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    assignment: { type: Schema.Types.ObjectId, ref: 'Assignment', required: true },
+    assignment: { type: Schema.Types.ObjectId, ref: 'Assignment' },
     lab: { type: Schema.Types.ObjectId, ref: 'Lab', required: true },
     booking: { type: Schema.Types.ObjectId, ref: 'Booking', required: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
     files: [{
         name: { type: String, required: true },
         storagePath: { type: String, required: true },

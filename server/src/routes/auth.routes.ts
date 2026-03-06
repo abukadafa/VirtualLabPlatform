@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth.middleware';
 
 const router = express.Router();
 
-router.post('/register', register);
+router.post('/register', authenticate, register);
 router.post('/login', login);
 router.get('/me', authenticate, getMe);
 router.post('/forgot-password', forgotPassword);

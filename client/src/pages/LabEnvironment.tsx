@@ -14,6 +14,7 @@ import {
     ClipboardCheck
 } from 'lucide-react';
 import AssignmentUpload from '../components/AssignmentUpload';
+import { API_URL } from '../lib/config';
 
 interface Lab {
     _id: string;
@@ -57,8 +58,6 @@ const LabEnvironment: React.FC = () => {
     const [assignments, setAssignments] = useState<any[]>([]);
     const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
     const [showSubmissions, setShowSubmissions] = useState(false);
-
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
     // Heartbeat to keep session alive
     const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,7 +124,22 @@ const LabEnvironment: React.FC = () => {
     const verifyAccess = async () => {
         if (!token || !user) return;
 
+        // Map full programme names to lab types (consistent with backend)
+        const typeMapping: { [key: string]: string } = {
+            'Artificial Intelligence': 'AI',
+            'Cybersecurity': 'Cybersecurity',
+            'Management Information System': 'MIS'
+        };
+
         try {
+            // Check if facilitator is in the programme for this lab
+            const isFacilitatorInProgramme = user.role === 'facilitator' && 
+                lab && user.programmes?.some(p => typeMapping[p] === lab.type);
+
+            if (user.role === 'admin' || isFacilitatorInProgramme) {
+                return; // Admin and enrolled facilitators have full access
+            }
+
             const response = await fetch(`${API_URL}/api/bookings/my-bookings`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -133,12 +147,12 @@ const LabEnvironment: React.FC = () => {
                 const bookings: any[] = await response.json();
                 const activeBooking = bookings.find(b =>
                     b.lab._id === labId &&
-                    (b.status === 'confirmed' || b.status === 'active')
+                    ['confirmed', 'requested', 'granted', 'active'].includes(b.status)
                 );
 
                 if (activeBooking) {
                     setActiveBookingId(activeBooking._id);
-                } else if (user.role !== 'admin') {
+                } else {
                     setError('Access Denied. You do not have a confirmed booking for this lab.');
                     setSessionState('error');
                     setTimeout(() => navigate('/dashboard'), 3000);
@@ -322,9 +336,10 @@ const LabEnvironment: React.FC = () => {
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="p-2 hover:bg-slate-700 rounded-lg transition"
+                                className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium"
                             >
-                                <ArrowLeft className="w-5 h-5 text-white" />
+                                <ArrowLeft className="w-4 h-4 text-white" />
+                                Back to Dashboard
                             </button>
                             <div>
                                 <h1 className="text-2xl font-bold text-white">{lab.name}</h1>
@@ -494,9 +509,14 @@ const LabEnvironment: React.FC = () => {
                                 </h2>
 
                                 {assignments.length === 0 ? (
-                                    <div className="text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-700/50">
-                                        <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                                        <p className="text-slate-400 text-sm font-medium">No active assignments for this lab.</p>
+                                    <div className="space-y-4">
+                                        <div className="text-center py-8 bg-slate-900/30 rounded-2xl border border-slate-700/50 mb-4">
+                                            <p className="text-slate-400 text-xs italic">Submit your general lab activity results below.</p>
+                                        </div>
+                                        <AssignmentUpload
+                                            labId={labId || ''}
+                                            bookingId={activeBookingId || ''}
+                                        />
                                     </div>
                                 ) : (
                                     <div className="space-y-8">
@@ -513,6 +533,7 @@ const LabEnvironment: React.FC = () => {
 
                                                 <AssignmentUpload
                                                     assignmentId={assignment._id}
+                                                    labId={labId || ''}
                                                     bookingId={activeBookingId || ''}
                                                 />
                                             </div>

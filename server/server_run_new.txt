@@ -1,0 +1,435 @@
+
+> server@1.0.0 dev
+> nodemon src/index.ts
+
+[33m[nodemon] 3.1.11[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: ts,json[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[dotenv@17.2.4] injecting env (23) from .env -- tip: ⚙️  override existing env vars with { override: true }
+🔔 Notification service initialized
+Initializing Resource Manager Service...
+Registering routes...
+Routes registered.
+Connecting to DB...
+Starting app listen...
+🚀 Server running on port 5000
+✅ MongoDB connected successfully
+DB connection attempted
+✅ Connected to Redis for Queue
+Health check requested
+[32m[nodemon] restarting child process[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[dotenv@17.2.4] injecting env (23) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+🔔 Notification service initialized
+Initializing Resource Manager Service...
+Registering routes...
+Routes registered.
+Connecting to DB...
+Starting app listen...
+🚀 Server running on port 5000
+✅ MongoDB connected successfully
+DB connection attempted
+✅ Connected to Redis for Queue
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[dotenv@17.2.4] injecting env (23) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+🔔 Notification service initialized
+Initializing Resource Manager Service...
+Registering routes...
+Routes registered.
+Connecting to DB...
+Starting app listen...
+🚀 Server running on port 5000
+✅ MongoDB connected successfully
+DB connection attempted
+✅ Connected to Redis for Queue
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[dotenv@17.2.4] injecting env (23) from .env -- tip: ⚙️  override existing env vars with { override: true }
+🔔 Notification service initialized
+Initializing Resource Manager Service...
+Registering routes...
+Routes registered.
+Connecting to DB...
+Starting app listen...
+🚀 Server running on port 5000
+✅ MongoDB connected successfully
+DB connection attempted
+✅ Connected to Redis for Queue
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `ts-node src/index.ts`[39m
+ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits. See https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/ for more information.
+    at Object.keyGeneratorIpFallback (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:637:13)
+    at Object.wrappedValidations.<computed> [as keyGeneratorIpFallback] (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:680:22)
+    at parseOptions (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:750:16)
+    at rateLimit (/home/fmoh/VirtualLabPlatform/server/node_modules/express-rate-limit/dist/index.cjs:831:18)
+    at Object.<anonymous> (/home/fmoh/VirtualLabPlatform/server/src/middleware/rate-limit.middleware.ts:8:43)
+    at Module._compile (node:internal/modules/cjs/loader:1529:14)
+    at Module.m._compile (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/home/fmoh/VirtualLabPlatform/server/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32) {
+  code: 'ERR_ERL_KEY_GEN_IPV6',
+  help: 'https://express-rate-limit.github.io/ERR_ERL_KEY_GEN_IPV6/'
+}
+[dotenv@17.2.4] injecting env (23) from .env -- tip: ⚙️  override existing env vars with { override: true }
+🔔 Notification service initialized
+Initializing Resource Manager Service...
+Registering routes...
+Routes registered.
+Connecting to DB...
+Starting app listen...
+🚀 Server running on port 5000
+✅ MongoDB connected successfully
+DB connection attempted
+✅ Connected to Redis for Queue
+ReplyError: UNBLOCKED force unblock from blocking operation, instance state changed (master -> replica?)
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '5' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}
+ReplyError: READONLY You can't write against a read only replica.
+    at parseError (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:179:12)
+    at parseType (/home/fmoh/VirtualLabPlatform/server/node_modules/redis-parser/lib/parser.js:302:14) {
+  command: { name: 'bzpopmin', args: [ 'bull:lab-requests:marker', '10' ] }
+}

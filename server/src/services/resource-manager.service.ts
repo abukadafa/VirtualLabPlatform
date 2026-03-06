@@ -3,13 +3,27 @@ import { Redis } from 'ioredis';
 import dockerService from './docker.service';
 import Session from '../models/Session.model';
 
-const redisConnection = new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    maxRetriesPerRequest: null,
-});
+let redisConnection: Redis | null = null;
+let labQueue: Queue | null = null;
 
-const labQueue = new Queue('lab-requests', { connection: redisConnection });
+const getRedisConnection = () => {
+    if (!redisConnection) {
+        redisConnection = new Redis({
+            host: process.env.REDIS_HOST || 'localhost',
+            port: parseInt(process.env.REDIS_PORT || '6379'),
+            maxRetriesPerRequest: null,
+            lazyConnect: true // Don't connect on creation
+        });
+    }
+    return redisConnection;
+};
+
+const getLabQueue = () => {
+    if (!labQueue) {
+        labQueue = new Queue('lab-requests', { connection: getRedisConnection() });
+    }
+    return labQueue;
+};
 
 // Queue limits to prevent spam
 const QUEUE_LIMITS = {
@@ -21,10 +35,21 @@ const QUEUE_LIMITS = {
 class ResourceManagerService {
     private userQueueAttempts: Map<string, number> = new Map();
     private userLastStopTime: Map<string, number> = new Map();
+    private worker: Worker | null = null;
 
     constructor() {
-        // Initialize queue worker
-        this.initQueueWorker();
+        // Defer worker initialization
+    }
+
+    public async init(): Promise<void> {
+        console.log('Initializing Resource Manager Service...');
+        try {
+            await getRedisConnection().connect();
+            console.log('✅ Connected to Redis for Queue');
+            this.initQueueWorker();
+        } catch (err) {
+            console.error('❌ Failed to connect to Redis:', err);
+        }
     }
 
     /**
@@ -42,7 +67,7 @@ class ResourceManagerService {
         const totalCount = await dockerService.getActiveContainerCount();
         const labTypeCount = labType ? await dockerService.getActiveContainerCount(labType) : 0;
 
-        const queueJobs = await labQueue.getWaiting();
+        const queueJobs = await getLabQueue().getWaiting();
 
         const available = totalCount < maxConcurrent && (!labType || labTypeCount < maxPerLabType);
 
@@ -68,7 +93,7 @@ class ResourceManagerService {
         }
 
         // Add to queue
-        const job = await labQueue.add(
+        const job = await getLabQueue().add(
             'start-lab',
             {
                 userId,
@@ -82,7 +107,7 @@ class ResourceManagerService {
             }
         );
 
-        const waitingJobs = await labQueue.getWaiting();
+        const waitingJobs = await getLabQueue().getWaiting();
         const position = waitingJobs.findIndex((j) => j.id === job.id) + 1;
 
         return {
@@ -113,7 +138,7 @@ class ResourceManagerService {
         }
 
         // Check if user already has a queued request
-        const userQueuedJobs = await labQueue.getJobs(['waiting'], 0, -1);
+        const userQueuedJobs = await getLabQueue().getJobs(['waiting'], 0, -1);
         const userInQueue = userQueuedJobs.some((job) => job.data.userId === userId);
 
         if (userInQueue) {
@@ -177,7 +202,7 @@ class ResourceManagerService {
                 return { sessionId: session._id };
             },
             {
-                connection: redisConnection,
+                connection: redisConnection!,
                 concurrency: 1, // Process one at a time
             }
         );
@@ -229,9 +254,9 @@ class ResourceManagerService {
      * Get queue status
      */
     async getQueueStatus(): Promise<any> {
-        const waiting = await labQueue.getWaiting();
-        const active = await labQueue.getActive();
-        const failed = await labQueue.getFailed();
+        const waiting = await getLabQueue().getWaiting();
+        const active = await getLabQueue().getActive();
+        const failed = await getLabQueue().getFailed();
 
         return {
             waiting: waiting.length,

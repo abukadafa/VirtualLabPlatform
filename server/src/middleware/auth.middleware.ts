@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import Role from '../models/Role.model';
 
 export interface AuthRequest extends Request {
     user?: {
@@ -7,6 +8,7 @@ export interface AuthRequest extends Request {
         role: string;
         programme?: string;
         programmes?: string[];
+        permissions?: string[];
     };
 }
 
@@ -43,5 +45,31 @@ export const authorize = (...roles: string[]) => {
         }
 
         next();
+    };
+};
+
+export const hasPermission = (permission: string) => {
+    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+
+        // Admin has all permissions
+        if (req.user.role === 'admin') return next();
+
+        try {
+            const roleData = await Role.findOne({ name: req.user.role });
+            if (!roleData) {
+                return res.status(403).json({ message: 'Role not found' });
+            }
+
+            if (roleData.permissions.includes(permission)) {
+                return next();
+            }
+
+            res.status(403).json({ message: `Access denied. Permission '${permission}' required.` });
+        } catch (error) {
+            res.status(500).json({ message: 'Server error checking permissions' });
+        }
     };
 };

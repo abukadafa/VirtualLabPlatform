@@ -23,7 +23,7 @@ class GuacamoleService {
      */
     private async getAdminToken(): Promise<string> {
         if (this.adminToken) {
-            return this.adminToken;
+            return this.adminToken!;
         }
 
         try {

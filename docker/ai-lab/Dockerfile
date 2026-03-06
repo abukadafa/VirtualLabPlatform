@@ -1,4 +1,4 @@
-# AI Lab - Python/ML/Data Science Environment
+# AI Lab - Python/ML/Data Science Environment (Optimized)
 FROM ubuntu:22.04
 
 # Prevent interactive prompts during installation
@@ -6,31 +6,22 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies and desktop environment
 RUN apt-get update && apt-get install -y \
-    # Desktop environment
     xfce4 xfce4-goodies \
-    # VNC server
     tightvncserver \
-    # X11 and window manager
     x11vnc xvfb \
-    # Utilities
-    wget curl git vim nano \
-    # Python build dependencies
+    wget curl git vim nano unzip zip \
+    python3 python3-pip python3-dev python3-venv \
     software-properties-common \
-    # Fonts
+    build-essential \
     fonts-liberation \
-    && apt-get clean
+    firefox \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install Anaconda
-RUN wget https://repo.anaconda.com/archive/Anaconda3-2023.09-0-Linux-x86_64.sh -O /tmp/anaconda.sh && \
-    bash /tmp/anaconda.sh -b -p /opt/anaconda3 && \
-    rm /tmp/anaconda.sh
+# Set up Python environment
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 
-# Add Anaconda to PATH
-ENV PATH=/opt/anaconda3/bin:$PATH
-
-# Install additional Python packages
 # Install Data Science and generic tools
-RUN conda install -y \
+RUN pip3 install --no-cache-dir \
     scikit-learn \
     jupyter \
     jupyterlab \
@@ -38,52 +29,49 @@ RUN conda install -y \
     numpy \
     matplotlib \
     seaborn \
-    && conda clean -a
+    scipy
 
 # Install NLP and CV tools
-RUN conda install -y \
+RUN pip3 install --no-cache-dir \
     nltk \
     spacy \
-    opencv \
-    && conda clean -a
+    opencv-python-headless
 
-# Install Deep Learning frameworks (Heavy)
-# Install PyTorch (from pytorch channel)
-RUN conda install -y -c pytorch \
-    pytorch torchvision torchaudio cpuonly \
-    && conda clean -a
+# Install Deep Learning frameworks (CPU only versions for size/compatibility)
+# PyTorch
+RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-# Install TensorFlow and Keras
-# Install TensorFlow and Keras via pip (to avoid conda solver issues)
-RUN pip install --no-cache-dir \
-    tensorflow \
-    keras
+# TensorFlow
+RUN pip3 install --no-cache-dir tensorflow-cpu keras
 
 # Install additional tools
-RUN pip install --no-cache-dir \
+RUN pip3 install --no-cache-dir \
     h2o \
-    pycaret \
-    transformers \
-    fastai
+    transformers
 
 # Create lab user
 RUN useradd -m -s /bin/bash labuser && \
     echo "labuser:labpassword" | chpasswd
 
-# Set up VNC
+# Set up VNC directory
 RUN mkdir -p /home/labuser/.vnc
 RUN echo "labpassword" | vncpasswd -f > /home/labuser/.vnc/passwd
 RUN chmod 600 /home/labuser/.vnc/passwd
 
-# Create startup script
-RUN echo '#!/bin/bash\nvncserver :1 -geometry 1280x720 -depth 24' > /home/labuser/start-vnc.sh && \
-    chmod +x /home/labuser/start-vnc.sh && \
-    chown -R labuser:labuser /home/labuser
+# Create xstartup
+RUN echo '#!/bin/bash\n\
+xrdb $HOME/.Xresources\n\
+startxfce4 &' > /home/labuser/.vnc/xstartup && \
+    chmod +x /home/labuser/.vnc/xstartup
 
-# Set up xstartup for VNC
-RUN echo '#!/bin/bash\nxrdb $HOME/.Xresources\nstartxfce4 &' > /home/labuser/.vnc/xstartup && \
-    chmod +x /home/labuser/.vnc/xstartup && \
-    chown labuser:labuser /home/labuser/.vnc/xstartup
+# Create startup script
+RUN echo '#!/bin/bash\n\
+rm -rf /tmp/.X1-lock /tmp/.X11-unix/X1\n\
+vncserver :1 -geometry 1280x720 -depth 24\n\
+tail -f /home/labuser/.vnc/*.log || tail -f /dev/null' > /home/labuser/startup.sh && \
+    chmod +x /home/labuser/startup.sh
+
+RUN chown -R labuser:labuser /home/labuser
 
 USER labuser
 WORKDIR /home/labuser
@@ -91,4 +79,4 @@ WORKDIR /home/labuser
 # Expose VNC port
 EXPOSE 5901
 
-CMD ["/bin/bash", "-c", "vncserver :1 -geometry 1280x720 -depth 24 && tail -f /dev/null"]
+CMD ["/home/labuser/startup.sh"]

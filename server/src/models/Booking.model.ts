@@ -1,18 +1,26 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export interface IBooking extends Document {
+export interface IBooking {
     user: mongoose.Types.ObjectId;
     lab: mongoose.Types.ObjectId;
     startTime: Date;
     endTime: Date;
-    status: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
+    status: 'pending' | 'confirmed' | 'requested' | 'granted' | 'active' | 'completed' | 'cancelled';
     purpose?: string;
     adminNote?: string;
+    provisionedUrl?: string;
+    provisionedAt?: Date;
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+
+export interface IBookingDocument extends IBooking, Document {
+    _id: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
 
-const BookingSchema: Schema = new Schema(
+const BookingSchema = new Schema<IBookingDocument>(
     {
         user: {
             type: Schema.Types.ObjectId,
@@ -34,7 +42,7 @@ const BookingSchema: Schema = new Schema(
         },
         status: {
             type: String,
-            enum: ['pending', 'confirmed', 'active', 'completed', 'cancelled'],
+            enum: ['pending', 'confirmed', 'requested', 'granted', 'active', 'completed', 'cancelled'],
             default: 'pending',
         },
         purpose: {
@@ -44,6 +52,13 @@ const BookingSchema: Schema = new Schema(
         adminNote: {
             type: String,
             trim: true,
+        },
+        provisionedUrl: {
+            type: String,
+            trim: true,
+        },
+        provisionedAt: {
+            type: Date,
         },
     },
     {
@@ -55,4 +70,5 @@ const BookingSchema: Schema = new Schema(
 BookingSchema.index({ user: 1, startTime: -1 });
 BookingSchema.index({ lab: 1, startTime: 1 });
 
-export default mongoose.model<IBooking>('Booking', BookingSchema);
+const Booking = mongoose.model<IBookingDocument>('Booking', BookingSchema);
+export default Booking;

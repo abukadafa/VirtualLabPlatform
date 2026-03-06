@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -21,7 +22,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
-function RoleProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
+function PermissionProtectedRoute({ children, permissions }: { children: React.ReactNode; permissions: string[] }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -36,7 +37,10 @@ function RoleProtectedRoute({ children, allowedRoles }: { children: React.ReactN
     return <Navigate to="/login" />;
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  // Admin always has access, otherwise check if user has any of the required permissions
+  const hasPermission = user.role === 'admin' || permissions.some(p => user.permissions?.includes(p));
+
+  if (!hasPermission) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 backdrop-blur-xl text-center max-w-md">
@@ -80,17 +84,17 @@ function AppRoutes() {
       <Route
         path="/admin/management"
         element={
-          <RoleProtectedRoute allowedRoles={['admin']}>
+          <PermissionProtectedRoute permissions={['manage_users', 'manage_labs', 'provision_labs', 'manage_roles', 'view_feedback', 'view_analytics', 'manage_settings']}>
             <AdminManagement />
-          </RoleProtectedRoute>
+          </PermissionProtectedRoute>
         }
       />
       <Route
         path="/facilitator/submissions"
         element={
-          <RoleProtectedRoute allowedRoles={['facilitator', 'admin']}>
+          <PermissionProtectedRoute permissions={['view_submissions', 'grade_submissions']}>
             <FacilitatorSubmissions />
-          </RoleProtectedRoute>
+          </PermissionProtectedRoute>
         }
       />
       <Route path="/" element={<Navigate to="/dashboard" />} />
@@ -98,11 +102,27 @@ function AppRoutes() {
   );
 }
 
+function BrandingProvider({ children }: { children: React.ReactNode }) {
+  const { branding } = useAuth();
+
+  React.useEffect(() => {
+    if (branding) {
+      const root = document.documentElement;
+      if (branding.primaryColor) root.style.setProperty('--primary-color', branding.primaryColor);
+      if (branding.secondaryColor) root.style.setProperty('--secondary-color', branding.secondaryColor);
+    }
+  }, [branding]);
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <BrandingProvider>
+          <AppRoutes />
+        </BrandingProvider>
       </AuthProvider>
     </Router>
   );

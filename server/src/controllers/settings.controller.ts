@@ -2,6 +2,34 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import configService from '../services/config.service';
 import emailService from '../services/email.service';
+import Role from '../models/Role.model';
+
+// Get public branding settings (no auth required)
+export const getPublicSettings = async (req: any, res: Response) => {
+    try {
+        const [general, roles] = await Promise.all([
+            configService.get('general'),
+            Role.find({}, 'name color description').lean()
+        ]);
+
+        res.json({
+            ...(general || { 
+                appName: 'Virtual Lab Platform', 
+                logoUrl: '', 
+                faviconUrl: '', 
+                primaryColor: '#3b82f6', 
+                secondaryColor: '#8b5cf6' 
+            }),
+            roles: roles.length > 0 ? roles : [
+                { name: 'student' },
+                { name: 'facilitator' },
+                { name: 'admin' }
+            ]
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching public settings', error: error.message });
+    }
+};
 
 // Get all system settings (admin only)
 export const getSettings = async (req: AuthRequest, res: Response) => {
@@ -34,6 +62,19 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
 
         if (!['general', 'smtp', 's3', 'notification_templates'].includes(key)) {
             return res.status(400).json({ message: 'Invalid settings key' });
+        }
+
+        // Handle secrets: Don't overwrite with '***' placeholders from the UI
+        if (key === 'smtp') {
+            const existing = await configService.get<any>('smtp') || {};
+            if (value.auth?.pass === '***') {
+                value.auth.pass = existing.auth?.pass;
+            }
+        } else if (key === 's3') {
+            const existing = await configService.get<any>('s3') || {};
+            if (value.credentials?.secretAccessKey === '***') {
+                value.credentials.secretAccessKey = existing.credentials?.secretAccessKey;
+            }
         }
 
         await configService.set(key, value, userId);

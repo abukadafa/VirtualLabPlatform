@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import SystemSettings from '../components/SystemSettings';
+import RoleManagement from '../components/RoleManagement';
 import {
     Users,
     Calendar,
@@ -18,6 +19,7 @@ import {
     X,
     Edit2,
     ShieldCheck,
+    Shield,
     Clock,
     BarChart3,
     ClipboardList,
@@ -25,9 +27,12 @@ import {
     TrendingUp,
     Activity,
     Star,
+    MessageSquare,
+    Download,
     Settings as SettingsIcon
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { API_URL } from '../lib/config';
 
 interface User {
     _id: string;
@@ -49,6 +54,7 @@ interface Booking {
     status: string;
     purpose?: string;
     adminNote?: string;
+    provisionedUrl?: string;
 }
 
 interface Submission {
@@ -71,6 +77,17 @@ interface AnalyticsData {
     recentActivity: { _id: string; count: number }[];
 }
 
+interface Feedback {
+    _id: string;
+    userName: string;
+    userEmail: string;
+    userRole: string;
+    category: string;
+    subject: string;
+    message: string;
+    createdAt: string;
+}
+
 const PROGRAMMES = [
     'Artificial Intelligence',
     'Cybersecurity',
@@ -78,11 +95,42 @@ const PROGRAMMES = [
 ];
 
 const AdminManagement: React.FC = () => {
-    const { token } = useAuth();
+    const { user, token, refreshBranding } = useAuth();
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState<'users' | 'bookings' | 'analytics' | 'submissions' | 'settings'>('users');
+    const location = useLocation();
+
+    // Helper to check permissions
+    const hasPerm = (perm: string) => {
+        if (user?.role === 'admin') return true;
+        return user?.permissions?.includes(perm) || false;
+    };
+
+    // Define available tabs based on permissions
+    const tabs = [
+        { id: 'users', label: 'Users', icon: Users, perm: 'manage_users' },
+        { id: 'bookings', label: 'Bookings', icon: Calendar, perm: 'manage_labs' },
+        { id: 'provisioning', label: 'Lab Requests', icon: ShieldCheck, perm: 'provision_labs' },
+        { id: 'submissions', label: 'Submissions', icon: ClipboardList, perm: 'view_submissions' },
+        { id: 'analytics', label: 'Analytics', icon: BarChart3, perm: 'view_analytics' },
+        { id: 'feedback', label: 'Feedback', icon: MessageSquare, perm: 'view_feedback' },
+        { id: 'roles', label: 'Roles', icon: Shield, perm: 'manage_roles' },
+        { id: 'settings', label: 'Settings', icon: SettingsIcon, perm: 'manage_settings' }
+    ].filter(tab => hasPerm(tab.perm));
+
+    // Ensure requested tab is allowed, otherwise pick first allowed tab
+    const initialTab = location.state?.activeTab || 'users';
+    const isTabAllowed = tabs.some(t => t.id === initialTab);
+
+    // Using refreshBranding to suppress the warning since it's passed but not used yet in top-level, 
+    // though it's passed to children. We can also just ignore the warning if preferred.
+    console.log('AdminManagement loaded, refreshBranding available:', !!refreshBranding);
+
+    const [activeTab, setActiveTab] = useState<string>(
+        isTabAllowed ? initialTab : (tabs.length > 0 ? tabs[0].id : 'users')
+    );
     const [users, setUsers] = useState<User[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
+    const [availableRoles, setAvailableRoles] = useState<{ _id: string, name: string }[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -93,11 +141,22 @@ const AdminManagement: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [bulkResults, setBulkResults] = useState<{ created: number, failed: number, errors: string[] } | null>(null);
 
+    // Provisioning Modal State
+    const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
+    const [selectedBookingForGrant, setSelectedBookingForGrant] = useState<Booking | null>(null);
+    const [grantFormData, setGrantFormData] = useState({
+        provisionedUrl: '',
+        adminNote: ''
+    });
+
     // Edit Credentials Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [editFormData, setEditFormData] = useState({
+        name: '',
+        email: '',
         username: '',
+        role: '',
         password: '',
         programmes: [] as string[]
     });
@@ -109,7 +168,38 @@ const AdminManagement: React.FC = () => {
     // Submissions & Analytics State
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+    const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
     const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
+    const [success, setSuccess] = useState<string | null>(null);
+
+    const handleExportFeedback = () => {
+        if (feedbacks.length === 0) return;
+        
+        const headers = ['Date', 'User Name', 'User Email', 'Role', 'Category', 'Subject', 'Message'];
+        const csvContent = [
+            headers.join(','),
+            ...feedbacks.map(f => [
+                new Date(f.createdAt).toLocaleString().replace(/,/g, ''),
+                `"${f.userName}"`,
+                `"${f.userEmail}"`,
+                `"${f.userRole}"`,
+                `"${f.category}"`,
+                `"${f.subject.replace(/"/g, '""')}"`,
+                `"${f.message.replace(/"/g, '""')}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `feedback_export_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
     const [gradeForm, setGradeForm] = useState({ grade: '', feedback: '' });
     const [extensionTime, setExtensionTime] = useState('');
@@ -131,12 +221,16 @@ const AdminManagement: React.FC = () => {
         fetchData();
     }, [activeTab, token]);
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
     const fetchData = async () => {
         if (!token) return;
         setLoading(true);
         try {
+            // Fetch roles for dropdowns
+            const rolesRes = await fetch(`${API_URL}/api/roles`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (rolesRes.ok) setAvailableRoles(await rolesRes.json());
+
             if (activeTab === 'users') {
                 const response = await fetch(`${API_URL}/api/users`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -157,6 +251,19 @@ const AdminManagement: React.FC = () => {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.ok) setAnalytics(await response.json());
+            } else if (activeTab === 'provisioning') {
+                const response = await fetch(`${API_URL}/api/bookings`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const allBookings: Booking[] = await response.json();
+                    setBookings(allBookings.filter(b => b.status === 'requested' || b.status === 'granted'));
+                }
+            } else if (activeTab === 'feedback') {
+                const response = await fetch(`${API_URL}/api/users/feedback`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (response.ok) setFeedbacks(await response.json());
             }
         } catch (error) {
             console.error(`Failed to fetch ${activeTab}:`, error);
@@ -167,6 +274,8 @@ const AdminManagement: React.FC = () => {
 
     const handleGradeSubmission = async () => {
         if (!selectedSubmission || !token) return;
+        setError(null);
+        setSuccess(null);
         try {
             const response = await fetch(`${API_URL}/api/submissions/grade/${selectedSubmission._id}`, {
                 method: 'PATCH',
@@ -180,18 +289,27 @@ const AdminManagement: React.FC = () => {
                 })
             });
             if (response.ok) {
-                setIsGradeModalOpen(false);
-                setGradeForm({ grade: '', feedback: '' });
+                setSuccess('Submission graded successfully!');
+                setTimeout(() => {
+                    setIsGradeModalOpen(false);
+                    setSuccess(null);
+                    setGradeForm({ grade: '', feedback: '' });
+                }, 1500);
                 fetchData();
+            } else {
+                const data = await response.json();
+                setError(data.message || 'Failed to grade submission');
             }
         } catch (error) {
-            console.error('Failed to grade submission:', error);
+            setError('Connection error');
         }
     };
 
     const activeStudents = bookings.filter(b => b.status === 'confirmed').length;
 
     const handleUpdateUserStatus = async (userId: string, newStatus: string) => {
+        setError(null);
+        setSuccess(null);
         try {
             const response = await fetch(`${API_URL}/api/users/${userId}`, {
                 method: 'PUT',
@@ -201,13 +319,22 @@ const AdminManagement: React.FC = () => {
                 },
                 body: JSON.stringify({ status: newStatus })
             });
-            if (response.ok) fetchData();
+            if (response.ok) {
+                setSuccess(`User status updated to ${newStatus}`);
+                fetchData();
+                setTimeout(() => setSuccess(null), 3000);
+            } else {
+                const data = await response.json();
+                setError(data.message || 'Failed to update user status');
+            }
         } catch (error) {
-            console.error('Failed to update user status:', error);
+            setError('Connection error');
         }
     };
 
     const handleUpdateBookingStatus = async (bookingId: string, newStatus: string) => {
+        setError(null);
+        setSuccess(null);
         try {
             const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
                 method: 'PATCH',
@@ -217,9 +344,16 @@ const AdminManagement: React.FC = () => {
                 },
                 body: JSON.stringify({ status: newStatus })
             });
-            if (response.ok) fetchData();
+            if (response.ok) {
+                setSuccess(`Booking ${newStatus} successfully`);
+                fetchData();
+                setTimeout(() => setSuccess(null), 3000);
+            } else {
+                const data = await response.json();
+                setError(data.message || 'Failed to update booking status');
+            }
         } catch (error) {
-            console.error('Failed to update booking status:', error);
+            setError('Connection error');
         }
     };
 
@@ -228,13 +362,12 @@ const AdminManagement: React.FC = () => {
         if (!selectedBooking) return;
         setIsSubmitting(true);
         setError(null);
+        setSuccess(null);
         try {
             const [hours, minutes] = extensionTime.split(':');
             const newEnd = new Date(selectedBooking.endTime);
             newEnd.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-            // If the selected time is earlier than or equal to current end time, 
-            // assume it's for the next day (common for sessions spanning midnight)
             if (newEnd <= new Date(selectedBooking.endTime)) {
                 newEnd.setDate(newEnd.getDate() + 1);
             }
@@ -248,11 +381,49 @@ const AdminManagement: React.FC = () => {
                 body: JSON.stringify({ endTime: newEnd.toISOString() })
             });
             if (response.ok) {
-                setIsExtendModalOpen(false);
+                setSuccess('Booking extended successfully!');
                 fetchData();
+                setTimeout(() => {
+                    setIsExtendModalOpen(false);
+                    setSuccess(null);
+                }, 1500);
             } else {
                 const data = await response.json();
                 setError(data.message || 'Failed to extend booking');
+            }
+        } catch (error) {
+            setError('Connection error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleGrantLab = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedBookingForGrant || !token) return;
+        setIsSubmitting(true);
+        setError(null);
+        setSuccess(null);
+        try {
+            const response = await fetch(`${API_URL}/api/bookings/${selectedBookingForGrant._id}/grant-instance`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(grantFormData)
+            });
+            if (response.ok) {
+                setSuccess('Lab instance granted successfully!');
+                fetchData();
+                setTimeout(() => {
+                    setIsGrantModalOpen(false);
+                    setSuccess(null);
+                    setGrantFormData({ provisionedUrl: '', adminNote: '' });
+                }, 1500);
+            } else {
+                const data = await response.json();
+                setError(data.message || 'Failed to grant lab instance');
             }
         } catch (error) {
             setError('Connection error');
@@ -332,27 +503,34 @@ const AdminManagement: React.FC = () => {
         }
     };
 
-    const handleResetCredentials = async (e: React.FormEvent) => {
+    const handleUpdateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedUser) return;
         setError(null);
+        setSuccess(null);
         setIsSubmitting(true);
         try {
+            const updatePayload = { ...editFormData };
+            if (!updatePayload.password) delete (updatePayload as any).password;
+
             const response = await fetch(`${API_URL}/api/users/${selectedUser._id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify(editFormData)
+                body: JSON.stringify(updatePayload)
             });
             const data = await response.json();
             if (response.ok) {
-                setIsEditModalOpen(false);
-                setEditFormData({ username: '', password: '', programmes: [PROGRAMMES[0]] });
+                setSuccess('User updated successfully!');
+                setTimeout(() => {
+                    setIsEditModalOpen(false);
+                    setSuccess(null);
+                }, 1500);
                 fetchData();
             } else {
-                setError(data.message || 'Failed to update credentials');
+                setError(data.message || 'Failed to update user');
             }
         } catch (error) {
             setError('Connection error');
@@ -379,48 +557,24 @@ const AdminManagement: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => navigate('/dashboard')}
-                            className="p-2 hover:bg-slate-700 rounded-lg transition"
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium"
                         >
-                            <LayoutDashboard className="w-5 h-5 text-slate-400" />
+                            <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                            Back to Dashboard
                         </button>
                         <h1 className="text-xl font-bold">Admin Management</h1>
                     </div>
                     <div className="flex bg-slate-700/50 p-1 rounded-xl flex-wrap gap-1">
-                        <button
-                            onClick={() => setActiveTab('users')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'users' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
-                        >
-                            <Users className="w-4 h-4 inline mr-2" />
-                            Users
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('bookings')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'bookings' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
-                        >
-                            <Calendar className="w-4 h-4 inline mr-2" />
-                            Bookings
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('submissions')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'submissions' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
-                        >
-                            <ClipboardList className="w-4 h-4 inline mr-2" />
-                            Submissions
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('analytics')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'analytics' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
-                        >
-                            <BarChart3 className="w-4 h-4 inline mr-2" />
-                            Analytics
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('settings')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'settings' ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
-                        >
-                            <SettingsIcon className="w-4 h-4 inline mr-2" />
-                            Settings
-                        </button>
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeTab === tab.id ? 'bg-blue-600 shadow-lg' : 'hover:bg-slate-700'}`}
+                            >
+                                <tab.icon className="w-4 h-4" />
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </header>
@@ -459,6 +613,22 @@ const AdminManagement: React.FC = () => {
                         </button>
                     )}
                 </div>
+
+                {error && !isModalOpen && !isEditModalOpen && !isExtendModalOpen && !isGradeModalOpen && (
+                    <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-center gap-3 text-red-400 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                        {error}
+                        <button onClick={() => setError(null)} className="ml-auto p-1 hover:bg-red-500/20 rounded-lg transition"><X className="w-4 h-4" /></button>
+                    </div>
+                )}
+
+                {success && !isModalOpen && !isEditModalOpen && !isExtendModalOpen && !isGradeModalOpen && (
+                    <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/50 rounded-xl flex items-center gap-3 text-emerald-400 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                        <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                        {success}
+                        <button onClick={() => setSuccess(null)} className="ml-auto p-1 hover:bg-emerald-500/20 rounded-lg transition"><X className="w-4 h-4" /></button>
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
@@ -517,15 +687,19 @@ const AdminManagement: React.FC = () => {
                                                     onClick={() => {
                                                         setSelectedUser(user);
                                                         setEditFormData({
+                                                            name: user.name,
+                                                            email: user.email,
                                                             username: user.username,
+                                                            role: user.role,
                                                             password: '',
                                                             programmes: user.programmes || []
                                                         });
                                                         setIsEditModalOpen(true);
                                                         setError(null);
+                                                        setSuccess(null);
                                                     }}
                                                     className="p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 rounded-lg transition border border-amber-500/20"
-                                                    title="Reset Credentials"
+                                                    title="Edit User Details"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
@@ -793,6 +967,135 @@ const AdminManagement: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
+                ) : activeTab === 'provisioning' ? (
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl">
+                        <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <ShieldCheck className="w-6 h-6 text-emerald-400" />
+                                Lab Provisioning Requests
+                            </h2>
+                            <div className="text-xs text-slate-400">
+                                {bookings.filter(b => b.status === 'requested').length} active requests
+                            </div>
+                        </div>
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-700/50">
+                                <tr>
+                                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Student & Lab</th>
+                                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Time Window</th>
+                                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Status</th>
+                                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-700/50 font-medium">
+                                {bookings.length > 0 ? bookings.map(booking => (
+                                    <tr key={booking._id} className="hover:bg-slate-700/20 transition">
+                                        <td className="px-6 py-4">
+                                            <div>
+                                                <div className="font-bold">{booking.user?.name || 'Unknown'}</div>
+                                                <div className="text-xs text-blue-400">{booking.lab?.name || 'Unknown Lab'}</div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-400">
+                                            <div className="flex flex-col">
+                                                <span>{new Date(booking.startTime).toLocaleDateString()}</span>
+                                                <span className="text-xs">{new Date(booking.startTime).toLocaleTimeString()} - {new Date(booking.endTime).toLocaleTimeString()}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded-full text-xs ${booking.status === 'granted' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
+                                                }`}>
+                                                {booking.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {booking.status === 'requested' ? (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedBookingForGrant(booking);
+                                                        setGrantFormData({ provisionedUrl: '', adminNote: '' });
+                                                        setIsGrantModalOpen(true);
+                                                    }}
+                                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-500/20"
+                                                >
+                                                    <ShieldCheck className="w-4 h-4" />
+                                                    Provision Lab
+                                                </button>
+                                            ) : (
+                                                <div className="text-xs text-slate-500 truncate max-w-[150px]" title={booking.provisionedUrl}>
+                                                    Granted: {booking.provisionedUrl}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                                            No pending lab provisioning requests.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : activeTab === 'feedback' ? (
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <MessageSquare className="w-6 h-6 text-blue-400" />
+                                User Feedback
+                            </h2>
+                            <button
+                                onClick={handleExportFeedback}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition shadow-lg shadow-emerald-500/20"
+                            >
+                                <Download className="w-4 h-4" />
+                                Export CSV
+                            </button>
+                        </div>
+                        {feedbacks.length > 0 ? (
+                            feedbacks.filter(f => 
+                                f.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                f.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                f.message.toLowerCase().includes(searchTerm.toLowerCase())
+                            ).map(feedback => (
+                                <div key={feedback._id} className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 backdrop-blur-xl">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center font-bold">
+                                                {feedback.userName.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold">{feedback.userName}</div>
+                                                <div className="text-xs text-slate-500">{feedback.userEmail} &bull; {feedback.userRole}</div>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-slate-500 bg-slate-700/50 px-2 py-1 rounded-md">
+                                            {new Date(feedback.createdAt).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded border border-purple-500/20">
+                                                {feedback.category}
+                                            </span>
+                                            <h4 className="font-bold text-slate-200">{feedback.subject}</h4>
+                                        </div>
+                                        <p className="text-slate-400 text-sm leading-relaxed bg-slate-900/30 p-4 rounded-xl border border-slate-700/30">
+                                            {feedback.message}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-500 backdrop-blur-xl">
+                                <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                                <p>No feedback collected yet.</p>
+                            </div>
+                        )}
+                    </div>
+                ) : activeTab === 'roles' ? (
+                    <RoleManagement />
                 ) : null}
             </main>
 
@@ -829,17 +1132,71 @@ const AdminManagement: React.FC = () => {
                                 </div>
                             )}
 
-                            <form onSubmit={handleResetCredentials} className="space-y-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-400 uppercase">Username</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        value={editFormData.username}
-                                        onChange={e => setEditFormData({ ...editFormData, username: e.target.value })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                                        placeholder="New username"
-                                    />
+                            {success && (
+                                <div className="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/50 rounded-xl flex items-center gap-3 text-emerald-400 text-sm">
+                                    <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                                    {success}
+                                </div>
+                            )}
+
+                            <form onSubmit={handleUpdateUser} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Full Name</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={editFormData.name}
+                                            onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="John Doe"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Email</label>
+                                        <input
+                                            required
+                                            type="email"
+                                            value={editFormData.email}
+                                            onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="john@example.com"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Username</label>
+                                        <input
+                                            required
+                                            type="text"
+                                            value={editFormData.username}
+                                            onChange={e => setEditFormData({ ...editFormData, username: e.target.value })}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            placeholder="New username"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-400 uppercase">Role</label>
+                                        <select
+                                            value={editFormData.role}
+                                            onChange={e => setEditFormData({ ...editFormData, role: e.target.value })}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        >
+                                            {availableRoles.length > 0 ? (
+                                                availableRoles.map(r => (
+                                                    <option key={r.name} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>
+                                                ))
+                                            ) : (
+                                                <>
+                                                    <option value="student">Student</option>
+                                                    <option value="facilitator">Facilitator</option>
+                                                    <option value="admin">Admin</option>
+                                                </>
+                                            )}
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-2">
@@ -999,9 +1356,17 @@ const AdminManagement: React.FC = () => {
                                             onChange={e => setFormData({ ...formData, role: e.target.value })}
                                             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
                                         >
-                                            <option value="student">Student</option>
-                                            <option value="facilitator">Facilitator</option>
-                                            <option value="admin">Admin</option>
+                                            {availableRoles.length > 0 ? (
+                                                availableRoles.map(r => (
+                                                    <option key={r.name} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>
+                                                ))
+                                            ) : (
+                                                <>
+                                                    <option value="student">Student</option>
+                                                    <option value="facilitator">Facilitator</option>
+                                                    <option value="admin">Admin</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                     <div className="space-y-1">
@@ -1288,6 +1653,81 @@ const AdminManagement: React.FC = () => {
                                     Post Result
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Grant Lab Modal */}
+            {isGrantModalOpen && selectedBookingForGrant && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsGrantModalOpen(false)}></div>
+                    <div className="relative w-full max-w-md bg-slate-800 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-700">
+                            <h2 className="text-xl font-bold flex items-center gap-2">
+                                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                                Provision Lab Instance
+                            </h2>
+                            <button onClick={() => setIsGrantModalOpen(false)} className="p-2 hover:bg-slate-700 rounded-lg transition">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="mb-6 bg-slate-700/30 p-4 rounded-2xl border border-slate-600/50">
+                                <div className="text-xs text-slate-400 uppercase font-bold mb-1">Requesting Student</div>
+                                <div className="text-sm font-bold text-white">{selectedBookingForGrant.user?.name}</div>
+                                <div className="text-xs text-emerald-400 mt-1">{selectedBookingForGrant.lab?.name}</div>
+                            </div>
+
+                            <form onSubmit={handleGrantLab} className="space-y-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Provisioned Lab URL</label>
+                                    <input
+                                        required
+                                        type="url"
+                                        value={grantFormData.provisionedUrl}
+                                        onChange={e => setGrantFormData({ ...grantFormData, provisionedUrl: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        placeholder="https://aws-provisioned-lab-url.com/..."
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400 uppercase">Admin Note (Optional)</label>
+                                    <textarea
+                                        rows={3}
+                                        value={grantFormData.adminNote}
+                                        onChange={e => setGrantFormData({ ...grantFormData, adminNote: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                                        placeholder="Add instructions for the student..."
+                                    />
+                                </div>
+
+                                <div className="pt-4 flex gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsGrantModalOpen(false)}
+                                        className="flex-1 px-4 py-2 border border-slate-700 rounded-xl font-bold hover:bg-slate-700 transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/50 text-white rounded-xl font-bold transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin rounded-full"></div>
+                                        ) : (
+                                            <>
+                                                <CheckCircle className="w-5 h-5" />
+                                                Grant Access
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
