@@ -45,8 +45,5 @@ const RoleSchema = new Schema<IRoleDocument>(
     }
 );
 
-// Index for performance as this is queried on every protected request
-RoleSchema.index({ name: 1 });
-
-const Role = mongoose.model<IRoleDocument>('Role', RoleSchema);
+const Role = mongoose.models.Role || mongoose.model<IRoleDocument>('Role', RoleSchema);
 export default Role;

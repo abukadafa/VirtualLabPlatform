@@ -11,6 +11,7 @@ export const labStartRateLimit = rateLimit({
     message: 'Too many lab requests from this account. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
     // Key by user ID instead of IP
     keyGenerator: (req: Request) => {
         // Assumes auth middleware has run and attached user to request
@@ -34,6 +35,7 @@ export const apiRateLimit = rateLimit({
     message: 'Too many requests from this IP. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
 });
 
 /**
@@ -46,4 +48,5 @@ export const authRateLimit = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true, // Don't count successful logins
+    validate: { xForwardedForHeader: false },
 });

@@ -16,7 +16,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         }
 
         // Check if user is authorized for this lab type based on their programme
-        if (req.user && req.user.role !== 'admin') {
+        if (req.user && req.user.role === 'student') {
             const userProgrammes = req.user.programmes || [];
             const typeMapping: { [key: string]: string } = {
                 'Artificial Intelligence': 'AI',
@@ -43,9 +43,11 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
             ],
         });
 
-        // Default status is always pending for approval
-        let status: 'confirmed' | 'pending' = 'pending';
-        let message = 'Booking request submitted. Please wait for Admin approval.';
+        // Default status is always pending for approval for students/facilitators
+        const status = req.user?.role === 'admin' ? 'confirmed' : 'pending';
+        let message = status === 'pending' 
+            ? 'Booking request submitted. Please wait for Admin approval.' 
+            : 'Booking confirmed.';
 
         // Check for conflicts (still useful to warn if full, but we don't auto-confirm)
         if (activeBookingsAtTime >= labExists.capacity) {
@@ -204,7 +206,7 @@ export const grantLabInstance = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// Update booking (Admin/Facilitator only)
+// Update booking (Admin only for critical status changes)
 export const updateBooking = async (req: AuthRequest, res: Response) => {
     try {
         const { status, endTime, adminNote, provisionedUrl } = req.body;
@@ -212,6 +214,11 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
         const booking = await Booking.findById(req.params.id).populate('user lab');
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // --- CRITICAL PROTECTION: Only Admins/Facilitators can confirm or cancel others' bookings ---
+        if (req.user?.role !== 'admin' && req.user?.role !== 'facilitator' && status && status !== booking.status) {
+            return res.status(403).json({ message: 'Access denied. Only administrators and facilitators can approve or deny bookings.' });
         }
 
         const oldStatus = booking.status;
@@ -278,6 +285,57 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
             .populate('user', 'name email');
 
         res.json(populatedBooking);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Delete/Archive Booking (Admin only)
+export const deleteBooking = async (req: AuthRequest, res: Response) => {
+    try {
+        const { reason, action = 'archive' } = req.body;
+        
+        const booking = await Booking.findById(req.params.id).populate('user lab');
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // Restriction: ONLY admins can delete bookings
+        if (req.user?.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied. Only administrators can perform this action.' });
+        }
+
+        const auditLogService = (await import('../services/audit-log.service')).default;
+
+        if (action === 'permanent') {
+            // Log the permanent deletion
+            await auditLogService.log({
+                userId: req.user.id,
+                eventType: 'security_alert',
+                severity: 'critical',
+                message: `Booking PERMANENTLY DELETED for ${(booking.user as any).name}. Reason: ${reason || 'N/A'}`,
+                eventData: { bookingId: booking._id, reason, action: 'permanent' },
+                req
+            });
+            await Booking.findByIdAndDelete(req.params.id);
+            res.json({ message: 'Booking permanently deleted' });
+        } else {
+            // Archive logic (set status to cancelled)
+            booking.status = 'cancelled';
+            if (!booking.adminNote) booking.adminNote = `Archived: ${reason || 'Admin Action'}`;
+            await booking.save();
+
+            // Log the archive action
+            await auditLogService.log({
+                userId: req.user.id,
+                eventType: 'security_alert',
+                severity: 'warning',
+                message: `Booking ARCHIVED (Cancelled) for ${(booking.user as any).name}. Reason: ${reason || 'N/A'}`,
+                eventData: { bookingId: booking._id, reason, action: 'archive' },
+                req
+            });
+            res.json({ message: 'Booking archived successfully (status set to cancelled)' });
+        }
     } catch (error: any) {
         res.status(500).json({ message: 'Server error', error: error.message });
     }

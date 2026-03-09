@@ -12,6 +12,7 @@ export type SessionState =
 export interface ISession extends Document {
     userId: mongoose.Types.ObjectId;
     labId: mongoose.Types.ObjectId;
+    labType: 'AI' | 'Cybersecurity' | 'MIS';
     containerId?: string;
     containerName?: string;
     guacamoleConnectionId?: string;
@@ -43,6 +44,12 @@ const SessionSchema: Schema = new Schema(
         labId: {
             type: Schema.Types.ObjectId,
             ref: 'Lab',
+            required: true,
+            index: true,
+        },
+        labType: {
+            type: String,
+            enum: ['AI', 'Cybersecurity', 'MIS'],
             required: true,
             index: true,
         },

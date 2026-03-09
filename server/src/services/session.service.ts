@@ -25,6 +25,7 @@ class SessionService {
         const session = new Session({
             userId,
             labId,
+            labType,
             state: capacity.available ? 'starting' : 'queued',
             queuePosition: capacity.available ? undefined : capacity.queueLength,
             estimatedWaitTime: capacity.available ? undefined : capacity.queueLength * 60, // Estimate 1 min per queued user
@@ -81,7 +82,7 @@ class SessionService {
             // Log audit event
             if (session.containerId) {
                 const auditLogService = (await import('./audit-log.service')).default;
-                await auditLogService.logLabStart(session.userId.toString(), session.labId.toString(), session._id.toString(), session.containerId, labType);
+                await auditLogService.logLabStart(session.userId.toString(), labType);
             }
         } catch (error) {
 

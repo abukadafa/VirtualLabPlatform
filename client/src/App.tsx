@@ -5,7 +5,6 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import LabEnvironment from './pages/LabEnvironment';
 import AdminManagement from './pages/AdminManagement';
-import FacilitatorSubmissions from './pages/FacilitatorSubmissions';
 import ResetPassword from './pages/ResetPassword';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -84,21 +83,12 @@ function AppRoutes() {
       <Route
         path="/admin/management"
         element={
-          <PermissionProtectedRoute permissions={['manage_users', 'manage_labs', 'provision_labs', 'manage_roles', 'view_feedback', 'view_analytics', 'manage_settings']}>
+          <PermissionProtectedRoute permissions={['manage_users', 'manage_labs', 'provision_labs', 'manage_roles', 'view_feedback', 'view_analytics', 'manage_settings', 'view_submissions', 'grade_submissions']}>
             <AdminManagement />
           </PermissionProtectedRoute>
         }
       />
-      <Route
-        path="/facilitator/submissions"
-        element={
-          <PermissionProtectedRoute permissions={['view_submissions', 'grade_submissions']}>
-            <FacilitatorSubmissions />
-          </PermissionProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" />} />
-    </Routes>
+      <Route path="/" element={<Navigate to="/dashboard" />} />    </Routes>
   );
 }
 

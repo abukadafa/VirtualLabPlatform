@@ -12,12 +12,14 @@ interface SystemSettings {
 }
 
 const SystemSettings: React.FC = () => {
-    const { token, refreshBranding } = useAuth();
+    const { token, user, refreshBranding } = useAuth();
     const [activeTab, setActiveTab] = useState<'general' | 'smtp' | 's3' | 'templates' | 'rbac'>('general');
     const [settings, setSettings] = useState<SystemSettings>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+    const isAdmin = user?.role === 'admin';
 
     useEffect(() => {
         fetchSettings();
@@ -40,6 +42,7 @@ const SystemSettings: React.FC = () => {
     };
 
     const saveSettings = async (key: string, value: any) => {
+        if (!isAdmin) return;
         setSaving(true);
         setTestResult(null);
 
@@ -86,6 +89,7 @@ const SystemSettings: React.FC = () => {
     };
 
     const testSMTP = async () => {
+        if (!isAdmin) return;
         setTestResult(null);
         try {
             const response = await fetch(`${API_URL}/api/settings/test-smtp`, {
@@ -174,6 +178,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">App Name</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.general?.appName || ''}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -185,7 +190,7 @@ const SystemSettings: React.FC = () => {
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="Virtual Lab Platform"
                                 />
                             </div>
@@ -193,6 +198,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Logo URL</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.general?.logoUrl || ''}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -204,7 +210,7 @@ const SystemSettings: React.FC = () => {
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="https://example.com/logo.png"
                                 />
                             </div>
@@ -212,6 +218,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Favicon URL</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.general?.faviconUrl || ''}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -223,7 +230,7 @@ const SystemSettings: React.FC = () => {
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="https://example.com/favicon.ico"
                                 />
                             </div>
@@ -231,6 +238,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Primary Color</label>
                                 <input
                                     type="color"
+                                    disabled={!isAdmin}
                                     value={settings.general?.primaryColor || '#3b82f6'}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -242,13 +250,14 @@ const SystemSettings: React.FC = () => {
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Secondary Color</label>
                                 <input
                                     type="color"
+                                    disabled={!isAdmin}
                                     value={settings.general?.secondaryColor || '#8b5cf6'}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -260,18 +269,20 @@ const SystemSettings: React.FC = () => {
                                             secondaryColor: e.target.value
                                         }
                                     })}
-                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
-                        <button
-                            onClick={() => saveSettings('general', settings.general)}
-                            disabled={saving}
-                            className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
-                        >
-                            <Save className="w-4 h-4" />
-                            Save Branding
-                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => saveSettings('general', settings.general)}
+                                disabled={saving}
+                                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                            >
+                                <Save className="w-4 h-4" />
+                                Save Branding
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -283,9 +294,10 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">SMTP Host</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.smtp?.host || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, host: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="smtp.gmail.com"
                                 />
                             </div>
@@ -293,47 +305,52 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Port</label>
                                 <input
                                     type="number"
+                                    disabled={!isAdmin}
                                     value={settings.smtp?.port || 587}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, port: parseInt(e.target.value) } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Username</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.smtp?.auth?.user || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, auth: { ...settings.smtp?.auth, user: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Password</label>
                                 <input
                                     type="password"
+                                    disabled={!isAdmin}
                                     value={settings.smtp?.auth?.pass || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, auth: { ...settings.smtp?.auth, pass: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
-                        <div className="flex gap-4 mt-4">
-                            <button
-                                onClick={() => saveSettings('smtp', settings.smtp)}
-                                disabled={saving}
-                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
-                            >
-                                <Save className="w-4 h-4" />
-                                Save SMTP
-                            </button>
-                            <button
-                                onClick={testSMTP}
-                                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition flex items-center gap-2"
-                            >
-                                <TestTube className="w-4 h-4" />
-                                Test Connection
-                            </button>
-                        </div>
+                        {isAdmin && (
+                            <div className="flex gap-4 mt-4">
+                                <button
+                                    onClick={() => saveSettings('smtp', settings.smtp)}
+                                    disabled={saving}
+                                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Save SMTP
+                                </button>
+                                <button
+                                    onClick={testSMTP}
+                                    className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition flex items-center gap-2"
+                                >
+                                    <TestTube className="w-4 h-4" />
+                                    Test Connection
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -345,9 +362,10 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Region</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.s3?.region || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, region: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="us-east-1"
                                 />
                             </div>
@@ -355,38 +373,43 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Bucket Name</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.s3?.bucket || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, bucket: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Access Key ID</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.s3?.credentials?.accessKeyId || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, credentials: { ...settings.s3?.credentials, accessKeyId: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Secret Access Key</label>
                                 <input
                                     type="password"
+                                    disabled={!isAdmin}
                                     value={settings.s3?.credentials?.secretAccessKey || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, credentials: { ...settings.s3?.credentials, secretAccessKey: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
-                        <button
-                            onClick={() => saveSettings('s3', settings.s3)}
-                            disabled={saving}
-                            className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
-                        >
-                            <Save className="w-4 h-4" />
-                            Save S3 Config
-                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => saveSettings('s3', settings.s3)}
+                                disabled={saving}
+                                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                            >
+                                <Save className="w-4 h-4" />
+                                Save S3 Config
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -399,6 +422,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Welcome Email Subject</label>
                                 <input
                                     type="text"
+                                    disabled={!isAdmin}
                                     value={settings.notification_templates?.welcome?.subject || ''}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -407,7 +431,7 @@ const SystemSettings: React.FC = () => {
                                             welcome: { ...settings.notification_templates?.welcome, subject: e.target.value }
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                                     placeholder="Welcome to {{appName}}"
                                 />
                             </div>
@@ -415,6 +439,7 @@ const SystemSettings: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Welcome Email Body</label>
                                 <textarea
                                     rows={4}
+                                    disabled={!isAdmin}
                                     value={settings.notification_templates?.welcome?.body || ''}
                                     onChange={(e) => setSettings({
                                         ...settings,
@@ -423,19 +448,21 @@ const SystemSettings: React.FC = () => {
                                             welcome: { ...settings.notification_templates?.welcome, body: e.target.value }
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-50"
                                     placeholder="Hello {{name}}, welcome to the platform!"
                                 />
                             </div>
                         </div>
-                        <button
-                            onClick={() => saveSettings('notification_templates', settings.notification_templates)}
-                            disabled={saving}
-                            className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
-                        >
-                            <Save className="w-4 h-4" />
-                            Save Templates
-                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => saveSettings('notification_templates', settings.notification_templates)}
+                                disabled={saving}
+                                className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                            >
+                                <Save className="w-4 h-4" />
+                                Save Templates
+                            </button>
+                        )}
                     </div>
                 )}
 

@@ -12,7 +12,7 @@ export interface AuthRequest extends Request {
     };
 }
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const token = req.header('Authorization')?.replace('Bearer ', '');
 
@@ -20,16 +20,34 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
             return res.status(401).json({ message: 'No authentication token, access denied' });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error('CRITICAL: JWT_SECRET not configured');
+            return res.status(500).json({ message: 'Internal server configuration error' });
+        }
+
+        const decoded = jwt.verify(token, jwtSecret) as {
             id: string;
             role: string;
             programme?: string;
             programmes?: string[];
+            permissions?: string[];
         };
 
-        req.user = decoded;
+        // Fetch fresh permissions from DB for the role
+        const roleData = await Role.findOne({ name: decoded.role.toLowerCase() });
+        const permissions = roleData ? roleData.permissions : [];
+
+        console.log(`[authenticate] User: ${decoded.id}, Role: ${decoded.role}, Found Permissions: ${permissions.length}`);
+        if (!roleData) console.warn(`[authenticate] WARNING: Role '${decoded.role}' not found in database!`);
+
+        req.user = {
+            ...decoded,
+            permissions
+        };
         next();
-    } catch (error) {
+    } catch (error: any) {
+        console.error('[authenticate] Error:', error.message);
         res.status(401).json({ message: 'Token verification failed, authorization denied' });
     }
 };
@@ -49,7 +67,7 @@ export const authorize = (...roles: string[]) => {
 };
 
 export const hasPermission = (permission: string) => {
-    return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Not authenticated' });
         }
@@ -57,19 +75,13 @@ export const hasPermission = (permission: string) => {
         // Admin has all permissions
         if (req.user.role === 'admin') return next();
 
-        try {
-            const roleData = await Role.findOne({ name: req.user.role });
-            if (!roleData) {
-                return res.status(403).json({ message: 'Role not found' });
-            }
+        console.log(`[hasPermission] Checking '${permission}' for user ${req.user.id} (${req.user.role}). User permissions:`, req.user.permissions);
 
-            if (roleData.permissions.includes(permission)) {
-                return next();
-            }
-
-            res.status(403).json({ message: `Access denied. Permission '${permission}' required.` });
-        } catch (error) {
-            res.status(500).json({ message: 'Server error checking permissions' });
+        if (req.user.permissions && req.user.permissions.includes(permission)) {
+            return next();
         }
+
+        console.log(`[hasPermission] REJECTED: '${permission}' missing from:`, req.user.permissions);
+        res.status(403).json({ message: `Access denied. Permission '${permission}' required.` });
     };
 };

@@ -10,7 +10,6 @@ export const ALL_PERMISSIONS = [
     'view_labs',
     'book_labs',
     'request_lab_instance',
-    'provision_labs',
     'view_submissions',
     'grade_submissions',
     'submit_assignments',
@@ -18,7 +17,11 @@ export const ALL_PERMISSIONS = [
     'manage_settings',
     'view_feedback',
     'submit_feedback',
-    'view_analytics'
+    'view_analytics',
+    'monitoring_always',
+    'export_users',
+    'manage_all_bookings',
+    'view_booking_history'
 ];
 
 export const getRoles = async (req: Request, res: Response) => {
@@ -117,9 +120,26 @@ export const seedRoles = async (req: Request, res: Response) => {
                     'view_labs',
                     'view_submissions',
                     'grade_submissions',
-                    'view_analytics',
                     'view_feedback',
-                    'submit_feedback'
+                    'submit_feedback',
+                    'manage_users',
+                    'export_users'
+                ]
+            },
+            {
+                name: 'lab technician',
+                description: 'Technical staff for lab and user management',
+                isSystemRole: true,
+                color: 'from-orange-500 to-amber-600',
+                permissions: [
+                    'view_dashboard',
+                    'view_labs',
+                    'view_submissions',
+                    'grade_submissions',
+                    'view_feedback',
+                    'submit_feedback',
+                    'manage_users',
+                    'export_users'
                 ]
             },
             {
@@ -134,7 +154,8 @@ export const seedRoles = async (req: Request, res: Response) => {
                     'request_lab_instance',
                     'submit_assignments',
                     'view_grades',
-                    'submit_feedback'
+                    'submit_feedback',
+                    'view_booking_history'
                 ]
             }
         ];

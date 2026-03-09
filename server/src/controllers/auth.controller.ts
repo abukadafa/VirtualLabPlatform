@@ -5,18 +5,25 @@ import User from '../models/User.model';
 import Role from '../models/Role.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import emailService from '../services/email.service';
+import auditLogService from '../services/audit-log.service';
 
 // Register a new user (Admin-only restricted)
+
+// Register a new user (Restricted or Open depending on configuration)
 export const register = async (req: AuthRequest, res: Response) => {
     try {
-        // Restrict registration to authenticated administrators
-        if (!req.user || req.user.role !== 'admin') {
+        const { name, username, email, password, role = 'student', programmes, studentId } = req.body;
+
+        // --- SECURITY: ROLE ENFORCEMENT ---
+        // If requester is not an admin, they can ONLY register as a 'student'
+        const isSelfRegistration = !req.user || req.user.role !== 'admin';
+        const targetRole = isSelfRegistration ? 'student' : role;
+
+        if (isSelfRegistration && role !== 'student') {
             return res.status(403).json({ 
-                message: 'Registration is restricted. Only administrators can create new accounts.' 
+                message: 'Access denied. Only administrators can assign privileged roles.' 
             });
         }
-
-        const { name, username, email, password, role, programmes, studentId } = req.body;
 
         const normalizedEmail = email?.toLowerCase().trim();
         const normalizedUsername = username?.toLowerCase().trim();
@@ -38,17 +45,27 @@ export const register = async (req: AuthRequest, res: Response) => {
             username,
             email,
             password,
-            role: role || 'student',
+            role: targetRole,
             programmes: programmes || [],
             studentId,
         });
 
         await user.save();
 
+        // Fetch permissions for the role
+        const roleData = await Role.findOne({ name: user.role });
+        const permissions = roleData ? roleData.permissions : [];
+
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error('CRITICAL: JWT_SECRET not configured');
+            return res.status(500).json({ message: 'Internal server configuration error' });
+        }
+
         // Generate token
         const token = jwt.sign(
-            { id: user._id, role: user.role, programmes: user.programmes },
-            process.env.JWT_SECRET || 'your-secret-key',
+            { id: user._id, role: user.role, programmes: user.programmes, permissions },
+            jwtSecret,
             { expiresIn: '7d' }
         );
 
@@ -73,6 +90,7 @@ export const register = async (req: AuthRequest, res: Response) => {
                 role: user.role,
                 programmes: user.programmes,
                 studentId: user.studentId,
+                permissions
             },
         });
     } catch (error: any) {
@@ -83,7 +101,7 @@ export const register = async (req: AuthRequest, res: Response) => {
 // Login user
 export const login = async (req: AuthRequest, res: Response) => {
     try {
-        const { identifier, password, role } = req.body;
+        const { identifier, password } = req.body;
 
         if (!identifier) {
             return res.status(400).json({ message: 'Email or username is required' });
@@ -97,38 +115,44 @@ export const login = async (req: AuthRequest, res: Response) => {
         });
 
         if (!user) {
+            await auditLogService.logLoginFailure(undefined, `User not found: ${normalizedIdentifier}`, req);
             return res.status(401).json({ message: 'Invalid credentials' });
-        }
-
-        // Verify role
-        if (role && user.role !== role) {
-            return res.status(401).json({ message: `Access denied. You are not a ${role}.` });
         }
 
         // Check password
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
+            await auditLogService.logLoginFailure(user._id.toString(), 'Invalid password', req);
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
         // Check status (Admins bypass, others must be enrolled or completed)
         if (user.role !== 'admin' && !['enrolled', 'completed'].includes(user.status)) {
+            await auditLogService.logLoginFailure(user._id.toString(), `Account status: ${user.status}`, req);
             return res.status(403).json({
                 message: `Your account status is '${user.status}'. Please contact the administrator.`,
                 status: user.status
             });
         }
 
-        // Generate token
-        const token = jwt.sign(
-            { id: user._id, role: user.role, programmes: user.programmes },
-            process.env.JWT_SECRET || 'your-secret-key',
-            { expiresIn: '7d' }
-        );
-
         // Fetch permissions for the role
         const roleData = await Role.findOne({ name: user.role });
         const permissions = roleData ? roleData.permissions : [];
+
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error('CRITICAL: JWT_SECRET not configured');
+            return res.status(500).json({ message: 'Internal server configuration error' });
+        }
+
+        // Generate token
+        const token = jwt.sign(
+            { id: user._id, role: user.role, programmes: user.programmes, permissions },
+            jwtSecret,
+            { expiresIn: '7d' }
+        );
+
+        await auditLogService.logLoginSuccess(user._id.toString(), req);
 
         res.json({
             token,

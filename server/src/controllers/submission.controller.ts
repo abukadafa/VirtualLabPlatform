@@ -4,6 +4,7 @@ import Submission from '../models/Submission.model';
 import Assignment from '../models/Assignment.model';
 import storageProvider from '../services/storage.service';
 import emailService from '../services/email.service';
+import auditLogService from '../services/audit-log.service';
 import { EventEmitter } from 'events';
 import { sanitizeFilename, isValidMimeType } from '../utils/fileValidation.util';
 
@@ -127,6 +128,9 @@ export const confirmSubmission = async (req: AuthRequest, res: Response) => {
         });
 
         await submission.save();
+
+        // Audit Log
+        await auditLogService.logFileUpload(studentId!, fileName, size, req);
 
         // --- Notification Events ---
         submissionEvents.emit('submissionReceived', {
@@ -427,6 +431,16 @@ export const downloadFile = async (req: AuthRequest, res: Response) => {
 
         const file = submission.files[idx];
         const downloadUrl = await storageProvider.getDownloadUrl(file.storagePath);
+
+        // Audit Log
+        await auditLogService.log({
+            userId: req.user?.id,
+            eventType: 'file_download',
+            message: `File downloaded: ${file.name}`,
+            severity: 'info',
+            eventData: { fileName: file.name, submissionId: submission._id },
+            req
+        });
 
         res.redirect(downloadUrl);
     } catch (error: any) {

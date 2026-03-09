@@ -47,8 +47,11 @@ export class ConfigService {
      * Helper for SMTP settings
      */
     async getSMTPConfig() {
-        return this.get<any>('smtp') || {
-            host: process.env.SMTP_HOST,
+        const dbConfig = await this.get<any>('smtp');
+        if (dbConfig && dbConfig.host) return dbConfig;
+
+        return {
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
             port: parseInt(process.env.SMTP_PORT || '587'),
             auth: {
                 user: process.env.SMTP_USER,

@@ -1,145 +1,109 @@
-import mongoose, { Document, Schema } from 'mongoose';
-
-export interface IAuditLog extends Document {
-    userId?: mongoose.Types.ObjectId;
-    sessionId?: mongoose.Types.ObjectId;
-    eventType: 'lab_start' | 'lab_stop' | 'lab_pause' | 'lab_resume' | 'security' | 'resource_violation' | 'auth_attempt';
-    eventData: {
-        containerId?: string;
-        labType?: string;
-        duration?: number;
-        violation?: string;
-        cpuUsage?: string;
-        memoryUsage?: string;
-        ipAddress?: string;
-        userAgent?: string;
-        [key: string]: any;
-    };
-    severity: 'info' | 'warning' | 'error' | 'critical';
-    message: string;
-    createdAt: Date;
-}
-
-const AuditLogSchema: Schema = new Schema(
-    {
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            index: true,
-        },
-        sessionId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Session',
-            index: true,
-        },
-        eventType: {
-            type: String,
-            enum: ['lab_start', 'lab_stop', 'lab_pause', 'lab_resume', 'security', 'resource_violation', 'auth_attempt'],
-            required: true,
-            index: true,
-        },
-        eventData: {
-            type: Schema.Types.Mixed,
-            default: {},
-        },
-        severity: {
-            type: String,
-            enum: ['info', 'warning', 'error', 'critical'],
-            default: 'info',
-            index: true,
-        },
-        message: {
-            type: String,
-            required: true,
-        },
-    },
-    {
-        timestamps: true,
-    }
-);
-
-// Index for efficient queries
-AuditLogSchema.index({ createdAt: -1 });
-AuditLogSchema.index({ eventType: 1, createdAt: -1 });
-
-const AuditLog = mongoose.model<IAuditLog>('AuditLog', AuditLogSchema);
+import AuditLog, { IAuditLog } from '../models/AuditLog.model';
+import { Request } from 'express';
 
 class AuditLogService {
     /**
-     * Log lab start event
+     * Generic log method that extracts metadata from request if provided
      */
-    async logLabStart(userId: string, labId: string, sessionId: string, containerId: string, labType: string): Promise<void> {
-        await AuditLog.create({
-            userId,
-            sessionId,
-            eventType: 'lab_start',
-            eventData: {
-                containerId,
-                labType,
-            },
-            severity: 'info',
-            message: `Lab session started: ${labType}`,
-        });
-    }
-
-    /**
-     * Log lab stop event
-     */
-    async logLabStop(userId: string, sessionId: string, duration: number): Promise<void> {
-        await AuditLog.create({
-            userId,
-            sessionId,
-            eventType: 'lab_stop',
-            eventData: {
-                duration,
-            },
-            severity: 'info',
-            message: `Lab session stopped after ${Math.round(duration / 60)} minutes`,
-        });
-    }
-
-    /**
-     * Log security event
-     */
-    async logSecurityEvent(event: {
+    async log(data: {
         userId?: string;
         sessionId?: string;
-        containerId?: string;
-        violation: string;
-        severity: 'warning' | 'error' | 'critical';
+        eventType: string;
+        message: string;
+        severity?: 'info' | 'warning' | 'error' | 'critical';
+        eventData?: any;
+        req?: Request;
     }): Promise<void> {
-        await AuditLog.create({
-            userId: event.userId,
-            sessionId: event.sessionId,
-            eventType: 'security',
-            eventData: {
-                containerId: event.containerId,
-                violation: event.violation,
-            },
-            severity: event.severity,
-            message: `Security event: ${event.violation}`,
+        try {
+            const auditLog = new AuditLog({
+                userId: data.userId,
+                sessionId: data.sessionId,
+                eventType: data.eventType,
+                message: data.message,
+                severity: data.severity || 'info',
+                eventData: {
+                    ...data.eventData,
+                    ipAddress: data.req?.ip || data.eventData?.ipAddress || 'unknown',
+                    userAgent: data.req?.headers['user-agent'] || data.eventData?.userAgent || 'unknown',
+                },
+            });
+            await auditLog.save();
+        } catch (error) {
+            console.error('Audit Log Error:', error);
+        }
+    }
+
+    async logLoginSuccess(userId: string, req: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'login_success',
+            message: 'User logged in successfully',
+            severity: 'info',
+            req
         });
     }
 
-    /**
-     * Log resource violation
-     */
-    async logResourceViolation(
-        sessionId: string,
-        containerId: string,
-        violation: string,
-        stats?: any
-    ): Promise<void> {
-        await AuditLog.create({
-            sessionId,
-            eventType: 'resource_violation',
-            eventData: {
-                containerId,
-                violation,
-                ...stats,
-            },
+    async logLoginFailure(userId: string | undefined, reason: string, req: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'login_failure',
+            message: `Login failed: ${reason}`,
             severity: 'warning',
-            message: `Resource violation: ${violation}`,
+            eventData: { reason },
+            req
+        });
+    }
+
+    async logLogout(userId: string, req: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'logout',
+            message: 'User logged out',
+            severity: 'info',
+            req
+        });
+    }
+
+    async logLabStart(userId: string, labType: string, req?: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'lab_start',
+            message: `Lab started: ${labType}`,
+            severity: 'info',
+            eventData: { labType },
+            req
+        });
+    }
+
+    async logLabStop(userId: string, labType: string, req?: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'lab_stop',
+            message: `Lab stopped: ${labType}`,
+            severity: 'info',
+            eventData: { labType },
+            req
+        });
+    }
+
+    async logCommandExec(userId: string, containerId: string, command: string): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'cmd_exec',
+            message: `Command executed: ${command.substring(0, 50)}${command.length > 50 ? '...' : ''}`,
+            severity: 'info',
+            eventData: { containerId, command }
+        });
+    }
+
+    async logFileUpload(userId: string, fileName: string, fileSize: number, req?: Request): Promise<void> {
+        await this.log({
+            userId,
+            eventType: 'file_upload',
+            message: `File uploaded: ${fileName}`,
+            severity: 'info',
+            eventData: { fileName, fileSize },
+            req
         });
     }
 
@@ -148,17 +112,16 @@ class AuditLogService {
      */
     async getAuditLogs(filters: {
         userId?: string;
-        sessionId?: string;
         eventType?: string;
         severity?: string;
         startDate?: Date;
         endDate?: Date;
         limit?: number;
-    }): Promise<IAuditLog[]> {
+        skip?: number;
+    }): Promise<{ logs: IAuditLog[]; total: number }> {
         const query: any = {};
 
         if (filters.userId) query.userId = filters.userId;
-        if (filters.sessionId) query.sessionId = filters.sessionId;
         if (filters.eventType) query.eventType = filters.eventType;
         if (filters.severity) query.severity = filters.severity;
         if (filters.startDate || filters.endDate) {
@@ -167,39 +130,15 @@ class AuditLogService {
             if (filters.endDate) query.createdAt.$lte = filters.endDate;
         }
 
-        return await AuditLog.find(query)
+        const total = await AuditLog.countDocuments(query);
+        const logs = await AuditLog.find(query)
             .sort({ createdAt: -1 })
-            .limit(filters.limit || 100);
-    }
+            .skip(filters.skip || 0)
+            .limit(filters.limit || 50)
+            .populate('userId', 'name email username');
 
-    /**
-     * Get security events summary
-     */
-    async getSecuritySummary(days: number = 7): Promise<any> {
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
-
-        const summary = await AuditLog.aggregate([
-            {
-                $match: {
-                    eventType: 'security',
-                    createdAt: { $gte: startDate },
-                },
-            },
-            {
-                $group: {
-                    _id: '$severity',
-                    count: { $sum: 1 },
-                },
-            },
-        ]);
-
-        return summary.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-        }, {});
+        return { logs, total };
     }
 }
 
 export default new AuditLogService();
-export { AuditLog };

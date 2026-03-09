@@ -50,48 +50,52 @@ const ResetPassword: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 backdrop-blur-xl">
+        <div className="min-h-screen bg-white flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-[2.5rem] shadow-xl p-10">
                 <div className="flex items-center justify-center mb-6">
-                    <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
+                    <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-900/10">
                         <Lock className="w-8 h-8 text-white" />
                     </div>
                 </div>
-                <h1 className="text-2xl font-bold text-center mb-2">Reset Password</h1>
-                <p className="text-slate-400 text-center mb-6">Enter your new password below</p>
+                <h1 className="text-3xl font-black text-center mb-2 text-slate-900 uppercase tracking-tight">
+                    Reset<span className="text-green-600">Password</span>
+                </h1>
+                <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] text-center mb-10">Secure Identity Update</p>
 
                 {result && (
-                    <div className={`mb-4 p-4 rounded-xl flex items-center gap-3 ${result.type === 'success' ? 'bg-green-500/10 border border-green-500/50 text-green-400' : 'bg-red-500/10 border border-red-500/50 text-red-400'}`}>
+                    <div className={`mb-8 p-4 rounded-2xl flex items-center gap-3 ${result.type === 'success' ? 'bg-green-50 border border-green-100 text-green-700' : 'bg-red-50 border border-red-100 text-red-700'}`}>
                         {result.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                        {result.message}
+                        <p className="text-sm font-bold">{result.message}</p>
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase block mb-2">New Password</label>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">New Secure Password</label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300 font-bold"
+                            placeholder="••••••••••••"
                             required
                         />
                     </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Confirm Password</label>
+                    <div className="space-y-2">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirm Password</label>
                         <input
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300 font-bold"
+                            placeholder="••••••••••••"
                             required
                         />
                     </div>
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white rounded-xl font-bold transition"
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center disabled:bg-green-400 shadow-lg shadow-green-900/10 group active:scale-[0.98] text-lg uppercase tracking-widest"
                     >
                         {loading ? 'Resetting...' : 'Reset Password'}
                     </button>

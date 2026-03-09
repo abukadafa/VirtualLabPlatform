@@ -131,7 +131,7 @@ export const startLab = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'Lab not found' });
         }
 
-        const userAllowedByProgramme = (req.user?.role === 'facilitator') && 
+        const userAllowedByProgramme = (req.user?.role === 'facilitator' || req.user?.role === 'student') && 
             (req.user?.programmes || []).some(p => typeMapping[p] === lab.type);
 
         if (!booking && req.user?.role !== 'admin' && !userAllowedByProgramme) {
@@ -153,15 +153,18 @@ export const startLab = async (req: AuthRequest, res: Response) => {
 
         // Log audit event
         if (session.containerId) {
-            await auditLogService.logLabStart(userId, labId as string, session._id.toString(), session.containerId, lab.type.toString());
+            await auditLogService.logLabStart(userId, lab.type.toString(), req);
         }
+
+        const guacamoleBaseUrl = process.env.GUACAMOLE_BASE_URL || '';
+        const guacamoleUrl = `${guacamoleBaseUrl}/guacamole/#/client/${session.guacamoleConnectionId}?token=${session.guacamoleToken}`;
 
         res.status(201).json({
             sessionId: session._id.toString(),
             state: session.state,
             queuePosition: session.queuePosition,
             estimatedWaitTime: session.estimatedWaitTime,
-            guacamoleUrl: session.guacamoleConnectionId ? `/guacamole/#/client/${session.guacamoleConnectionId}?token=${session.guacamoleToken}` : undefined,
+            guacamoleUrl: session.guacamoleConnectionId ? guacamoleUrl : undefined,
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Failed to start lab session' });
@@ -187,7 +190,7 @@ export const stopLab = async (req: AuthRequest, res: Response) => {
         await sessionService.stopSession(session._id.toString());
 
         // Log audit event
-        await auditLogService.logLabStop(userId, session._id.toString(), duration);
+        await auditLogService.logLabStop(userId, session.labType.toString(), req);
 
         // Record stop for rate limiting
         resourceManagerService.recordUserStop(userId);
@@ -241,8 +244,9 @@ export const getLabConnection = async (req: AuthRequest, res: Response) => {
             return res.status(400).json({ message: 'Session not ready yet' });
         }
 
+        const guacamoleBaseUrl = process.env.GUACAMOLE_BASE_URL || '';
         res.json({
-            connectionUrl: `/guacamole/#/client/${session.guacamoleConnectionId}?token=${session.guacamoleToken}`,
+            connectionUrl: `${guacamoleBaseUrl}/guacamole/#/client/${session.guacamoleConnectionId}?token=${session.guacamoleToken}`,
             connectionId: session.guacamoleConnectionId,
         });
     } catch (error: any) {

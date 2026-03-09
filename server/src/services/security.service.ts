@@ -24,6 +24,12 @@ class SecurityService {
                 await this.handleSecurityAlert(report);
             } else {
                 console.log('✅ Security audit passed: No critical/high vulnerabilities.');
+                try {
+                    await AuditLog.create({ 
+                        action: 'VULNERABILITY_SCAN', 
+                        details: 'Passed: No critical or high vulnerabilities detected.' 
+                    });
+                } catch (e) {}
             }
 
             return { success: true, report };
@@ -39,6 +45,12 @@ class SecurityService {
                 }
             }
             console.error('Security audit failed to execute:', error);
+            try {
+                await AuditLog.create({ 
+                    action: 'VULNERABILITY_SCAN_FAILED', 
+                    details: `Failed to execute: ${error.message}` 
+                });
+            } catch (e) {}
             return { success: false, error: error.message };
         }
     }
@@ -49,8 +61,15 @@ class SecurityService {
         
         console.error(`🚨 ${message}`);
 
-        // 1. Log to DB (if AuditLog model exists, otherwise simple console)
-        // await AuditLog.create({ action: 'SECURITY_ALERT', details: message });
+        // 1. Log to DB
+        try {
+            await AuditLog.create({ 
+                action: 'VULNERABILITY_SCAN', 
+                details: message 
+            });
+        } catch (err) {
+            console.error('Failed to log security alert:', err);
+        }
 
         // 2. Notify Admin via Email
         // Assuming there is a generic admin email configured in system settings

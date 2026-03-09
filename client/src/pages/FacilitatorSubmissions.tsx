@@ -22,7 +22,7 @@ import {
     ShieldQuestion,
     RotateCcw
 } from 'lucide-react';
-import { API_URL } from '../lib/config';
+import { API_URL, NOUN_ELEARN_URL } from '../lib/config';
 
 interface Submission {
     _id: string;
@@ -203,6 +203,30 @@ const FacilitatorSubmissions: React.FC = () => {
         }
     };
 
+    const handleDownload = async (submissionId: string, fileIndex: number, fileName: string) => {
+        try {
+            const response = await fetch(`${API_URL}/api/submissions/download/${submissionId}/${fileIndex}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                alert('Download failed. You might not have permission.');
+            }
+        } catch (error) {
+            console.error('Download error:', error);
+            alert('An error occurred while downloading the file.');
+        }
+    };
+
     const handleBulkDownload = async () => {
         if (selectedSubmissionIds.size === 0) return;
         setBulkDownloading(true);
@@ -294,6 +318,13 @@ const FacilitatorSubmissions: React.FC = () => {
                             <p className="text-slate-400 text-sm mt-1">Review and grade student work</p>
                         </div>
                         <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
+                                className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition text-sm font-medium shadow-lg shadow-purple-500/20"
+                            >
+                                <FileText className="w-4 h-4" />
+                                E-Learn Portal
+                            </button>
                             <button
                                 onClick={() => navigate('/dashboard')}
                                 className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition text-sm font-medium"
@@ -627,7 +658,7 @@ const FacilitatorSubmissions: React.FC = () => {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => window.open(`${API_URL}/api/submissions/download/${selectedSubmission._id}/${idx}`, '_blank')}
+                                                    onClick={() => handleDownload(selectedSubmission._id, idx, file.name)}
                                                     className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition"
                                                     title="Download File"
                                                 >

@@ -25,10 +25,11 @@ interface AuthContextType {
     user: User | null;
     token: string | null;
     branding: Branding | null;
-    login: (identifier: string, password: string, role: string) => Promise<void>;
+    login: (identifier: string, password: string, role?: string) => Promise<void>;
     register: (userData: any) => Promise<void>;
     logout: () => void;
     refreshBranding: () => Promise<void>;
+    refreshUser: () => Promise<void>;
     isLoading: boolean;
 }
 
@@ -39,6 +40,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
     const [branding, setBranding] = useState<Branding | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    const refreshUser = async () => {
+        const storedToken = localStorage.getItem('token');
+        if (storedToken) {
+            try {
+                const response = await fetch(`${API_URL}/api/auth/me`, {
+                    headers: {
+                        Authorization: `Bearer ${storedToken}`,
+                    },
+                });
+                if (response.ok) {
+                    const userData = await response.json();
+                    setUser(userData);
+                }
+            } catch (error) {
+                console.error('User refresh failed:', error);
+            }
+        }
+    };
 
     const applyBranding = (data: Branding) => {
         if (!data) return;
@@ -121,7 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         checkAuth();
     }, []);
 
-    const login = async (identifier: string, password: string, role: string) => {
+    const login = async (identifier: string, password: string, role?: string) => {
         const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
             headers: {
@@ -175,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, branding, login, register, logout, refreshBranding, isLoading }}>
+        <AuthContext.Provider value={{ user, token, branding, login, register, logout, refreshBranding, refreshUser, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

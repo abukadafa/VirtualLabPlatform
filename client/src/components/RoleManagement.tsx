@@ -13,12 +13,14 @@ interface Role {
 }
 
 const RoleManagement: React.FC = () => {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const [roles, setRoles] = useState<Role[]>([]);
     const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+
+    const isAdmin = user?.role === 'admin';
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,8 +48,8 @@ const RoleManagement: React.FC = () => {
                 const rolesData = await rolesRes.json();
                 const permsData = await permsRes.json();
                 
-                if (rolesData.length === 0) {
-                    // Automatically seed if no roles found
+                if (rolesData.length === 0 && isAdmin) {
+                    // Automatically seed if no roles found - only for admins
                     await fetch(`${API_URL}/api/roles/seed`, { 
                         method: 'POST', 
                         headers: { Authorization: `Bearer ${token}` } 
@@ -68,6 +70,7 @@ const RoleManagement: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isAdmin) return;
         setError(null);
         setSuccess(null);
 
@@ -104,6 +107,7 @@ const RoleManagement: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (!isAdmin) return;
         if (!window.confirm('Are you sure you want to delete this role?')) return;
         
         try {
@@ -123,6 +127,7 @@ const RoleManagement: React.FC = () => {
     };
 
     const togglePermission = (perm: string) => {
+        if (!isAdmin) return;
         setFormData(prev => ({
             ...prev,
             permissions: prev.permissions.includes(perm)
@@ -143,17 +148,19 @@ const RoleManagement: React.FC = () => {
                         <p>Define custom roles and assign granular permissions. Note: System roles cannot be deleted.</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => {
-                        setEditingRole(null);
-                        setFormData({ name: '', description: '', permissions: [], color: 'from-blue-600 to-indigo-600' });
-                        setIsModalOpen(true);
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition h-fit"
-                >
-                    <Plus className="w-4 h-4" />
-                    Create Role
-                </button>
+                {isAdmin && (
+                    <button
+                        onClick={() => {
+                            setEditingRole(null);
+                            setFormData({ name: '', description: '', permissions: [], color: 'from-blue-600 to-indigo-600' });
+                            setIsModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition h-fit"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Create Role
+                    </button>
+                )}
             </div>
 
             {error && (
@@ -180,31 +187,33 @@ const RoleManagement: React.FC = () => {
                                 <div className={`w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center`}>
                                     <Shield className="w-5 h-5 text-blue-400" />
                                 </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => {
-                                            setEditingRole(role);
-                                            setFormData({
-                                                name: role.name,
-                                                description: role.description,
-                                                permissions: role.permissions,
-                                                color: role.color
-                                            });
-                                            setIsModalOpen(true);
-                                        }}
-                                        className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 transition"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    {!role.isSystemRole && (
+                                {isAdmin && (
+                                    <div className="flex gap-2">
                                         <button
-                                            onClick={() => handleDelete(role._id)}
-                                            className="p-2 hover:bg-red-500/20 rounded-lg text-red-400 transition"
+                                            onClick={() => {
+                                                setEditingRole(role);
+                                                setFormData({
+                                                    name: role.name,
+                                                    description: role.description,
+                                                    permissions: role.permissions,
+                                                    color: role.color
+                                                });
+                                                setIsModalOpen(true);
+                                            }}
+                                            className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 transition"
                                         >
-                                            <Trash2 className="w-4 h-4" />
+                                            <Edit2 className="w-4 h-4" />
                                         </button>
-                                    )}
-                                </div>
+                                        {!role.isSystemRole && (
+                                            <button
+                                                onClick={() => handleDelete(role._id)}
+                                                className="p-2 hover:bg-red-500/20 rounded-lg text-red-400 transition"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <h3 className="text-lg font-bold capitalize mb-1 flex items-center gap-2">

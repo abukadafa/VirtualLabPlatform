@@ -7,6 +7,7 @@ import {
     updateBooking,
     requestLabInstance,
     grantLabInstance,
+    deleteBooking,
 } from '../controllers/booking.controller';
 import { authenticate, authorize, hasPermission } from '../middleware/auth.middleware';
 
@@ -19,5 +20,6 @@ router.patch('/:id', authenticate, hasPermission('manage_labs'), updateBooking);
 router.patch('/:id/request-instance', authenticate, hasPermission('request_lab_instance'), requestLabInstance);
 router.patch('/:id/grant-instance', authenticate, hasPermission('provision_labs'), grantLabInstance);
 router.patch('/:id/cancel', authenticate, hasPermission('manage_labs'), cancelBooking);
+router.delete('/:id', authenticate, hasPermission('manage_labs'), deleteBooking);
 
 export default router;

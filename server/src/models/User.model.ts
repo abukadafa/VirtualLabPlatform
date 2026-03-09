@@ -10,10 +10,14 @@ export interface IUser {
     status: 'enrolled' | 'completed' | 'inactive';
     programmes: string[];
     studentId?: string;
+    isDeleted?: boolean;
+    deletedAt?: Date;
+    deletionReason?: string;
     lastEnrollmentDate?: Date;
     completionDate?: Date;
     resetPasswordToken?: string;
     resetPasswordExpires?: Date;
+    addedBy?: string;
     createdAt?: Date;
     updatedAt?: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -70,6 +74,10 @@ const UserSchema = new Schema<IUserDocument>(
             type: String,
             trim: true,
         },
+        addedBy: {
+            type: String,
+            index: true,
+        },
         lastEnrollmentDate: {
             type: Date,
             default: Date.now,
@@ -82,6 +90,17 @@ const UserSchema = new Schema<IUserDocument>(
         },
         resetPasswordExpires: {
             type: Date,
+        },
+        isDeleted: {
+            type: Boolean,
+            default: false,
+            index: true,
+        },
+        deletedAt: {
+            type: Date,
+        },
+        deletionReason: {
+            type: String,
         },
     },
     {
