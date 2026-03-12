@@ -1,0 +1,4 @@
+User Statuses:
+- Admin User (admin@virtuallab.com) | Role: admin | Status: enrolled
+- abu Bello (abukadafa@gmail.com) | Role: student | Status: enrolled
+- Sinan Idris (abukadafa@yahoo.com) | Role: facilitator | Status: enrolled

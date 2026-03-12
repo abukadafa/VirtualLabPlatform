@@ -1,0 +1,137 @@
+version: '3.8'
+
+services:
+  # MongoDB for Application Data
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb-prod
+    restart: always
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_APP_USERNAME=${MONGO_APP_USER}
+      - MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
+    volumes:
+      - mongodb_data_prod:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - internal-network
+
+  # Redis for Queue Management
+  redis:
+    image: redis:7-alpine
+    container_name: redis-prod
+    restart: always
+    command: redis-server --appendonly yes
+    networks:
+      - internal-network
+
+  # Guacamole Daemon (guacd)
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: guacd-prod
+    restart: always
+    networks:
+      - internal-network
+
+  # Guacamole Database (PostgreSQL)
+  guacamole-db:
+    image: postgres:15-alpine
+    container_name: guacamole-postgres-prod
+    restart: always
+    environment:
+      - POSTGRES_DB=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=${GUAC_DB_PASSWORD}
+    volumes:
+      - guacamole-db-data-prod:/var/lib/postgresql/data
+    networks:
+      - internal-network
+
+  # Guacamole Web App
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole-prod
+    restart: always
+    environment:
+      - GUACD_HOSTNAME=guacd
+      - POSTGRES_HOSTNAME=guacamole-db
+      - POSTGRES_DATABASE=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=${GUAC_DB_PASSWORD}
+    depends_on:
+      - guacd
+      - guacamole-db
+    networks:
+      - internal-network
+
+  # Backend Server
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: server-prod
+    restart: always
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://${MONGO_APP_USER}:${MONGO_APP_PASSWORD}@mongodb:27017/virtuallab?authSource=virtuallab
+      - REDIS_HOST=redis
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+      - GUACAMOLE_URL=http://guacamole:8080/guacamole/
+    depends_on:
+      - mongodb
+      - redis
+      - guacamole
+    networks:
+      - internal-network
+      - proxy-network
+    # --- TIER 3 SECURITY HARDENING ---
+    security_opt:
+      - no-new-privileges:true # Prevents processes from gaining new privileges
+    cap_drop:
+      - ALL # Drop all capabilities by default
+    read_only: true # Enforce a read-only root filesystem
+    tmpfs:
+      # Provide minimal writeable space where strictly required
+      - /tmp
+      - /app/logs:uid=1000,gid=1000
+
+  # Client (Nginx serving React)
+  client:
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+    container_name: client-prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - proxy-network
+      - internal-network # Needs internal to proxy to guacamole if checking health or similar, but mainly proxy-network for public access and proxying to server/guac. Wait, nginx needs to reach server/guac, so it needs internal-network too.
+    depends_on:
+      - server
+    # --- TIER 3 SECURITY HARDENING ---
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE # Required for Nginx to bind to port 80/443
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+      - /etc/nginx/conf.d:ro # Read-only mount for the config area
+
+networks:
+  internal-network:
+    driver: bridge
+  proxy-network:
+    driver: bridge
+
+volumes:
+  mongodb_data_prod:
+  guacamole-db-data-prod:

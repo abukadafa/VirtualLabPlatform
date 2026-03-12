@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap');
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  /* ACETEL Brand Colors */
+  --color-acetel-green: #008751;
+  --color-acetel-green-light: #00a562;
+  --color-acetel-green-dark: #006d40;
+  --color-acetel-navy: #1e3a8a;
+  --color-acetel-navy-light: #2563eb;
+  --color-acetel-navy-dark: #172554;
+}
+
+@layer base {
+  :root {
+    /* Updated for ACETEL Brand (White/Navy Blue Theme) */
+    --background: 210 40% 98%;
+    /* Light slate white */
+    --foreground: 222.2 84% 4.9%;
+    /* Dark slate text */
+    --card: 0 0% 100%;
+    /* White cards */
+    --card-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 33.3%;
+    /* Navy Blue #1e3a8a */
+    --primary-foreground: 210 40% 98%;
+    --accent: 156 100% 26%;
+    /* Keep ACETEL Green for accents */
+    --accent-foreground: 210 40% 98%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 33.3%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-[#f8fafc] text-slate-900;
+    /* Clean white background */
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Montserrat', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-acetel-primary {
+    @apply bg-[#1e3a8a] text-white hover:bg-[#1e3a8a]/90 font-bold py-2.5 px-6 rounded-lg transition-all duration-200 shadow-sm border border-[#1e3a8a];
+  }
+
+  .btn-acetel-secondary {
+    @apply bg-[#008751] hover:bg-[#008751]/90 text-white font-bold py-2.5 px-6 rounded-lg transition-all duration-200 shadow-sm;
+  }
+
+  .btn-acetel-outline {
+    @apply border-2 border-[#1e3a8a] text-[#1e3a8a] hover:bg-[#1e3a8a] hover:text-white font-bold py-2.5 px-6 rounded-lg transition-all duration-200;
+  }
+
+  .card-acetel {
+    @apply bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 text-slate-900;
+  }
+
+  .header-acetel {
+    @apply bg-white text-[#1e3a8a] border-b border-slate-200 shadow-sm;
+  }
+}

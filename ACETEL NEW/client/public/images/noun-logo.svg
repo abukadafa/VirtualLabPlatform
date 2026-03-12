@@ -1,0 +1,5 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="100" cy="100" r="90" fill="#1a2b48" />
+  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="Montserrat, sans-serif" font-weight="bold" font-size="40">NOUN</text>
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#1a2b48" stroke-width="5" />
+</svg>

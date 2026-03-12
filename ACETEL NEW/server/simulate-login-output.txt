@@ -1,0 +1,23 @@
+Connected to MongoDB
+
+Attempting login for: Admin@virtuallab.com as admin
+SUCCESS: User found: admin@virtuallab.com (Role: admin, Status: enrolled)
+Password match: false
+SUCCESS: Role match
+SUCCESS: Status is enrolled
+-------------------
+Connected to MongoDB
+
+Attempting login for: admin@virtuallab.com as admin
+SUCCESS: User found: admin@virtuallab.com (Role: admin, Status: enrolled)
+Password match: false
+SUCCESS: Role match
+SUCCESS: Status is enrolled
+-------------------
+Connected to MongoDB
+
+Attempting login for: admin@virtuallab.com as student
+SUCCESS: User found: admin@virtuallab.com (Role: admin, Status: enrolled)
+Password match: false
+FAILURE: Role mismatch. User is admin, but logging in as student
+SUCCESS: Status is enrolled

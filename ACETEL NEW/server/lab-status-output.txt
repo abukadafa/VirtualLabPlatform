@@ -1,0 +1,4 @@
+Current Labs and Statuses:
+- Artificial Intelligence Lab (AI) | Status: active | ID: 698f30a6fb1cd3241db1619d
+- Cybersecurity Lab (Cybersecurity) | Status: active | ID: 698f30a6fb1cd3241db1619e
+- Management Information System Lab (MIS) | Status: active | ID: 698f30a6fb1cd3241db1619f
