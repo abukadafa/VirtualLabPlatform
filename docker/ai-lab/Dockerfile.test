@@ -1,0 +1,32 @@
+# AI Lab - Standard
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    xfce4 xfce4-goodies \
+    tightvncserver x11vnc xvfb \
+    wget curl git vim nano unzip zip \
+    python3 python3-pip python3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Essential AI tools only
+RUN pip3 install --no-cache-dir pandas numpy matplotlib seaborn scikit-learn jupyterlab
+
+# Create lab user
+RUN useradd -m -s /bin/bash labuser && \
+    echo "labuser:labpassword" | chpasswd
+
+RUN mkdir -p /home/labuser/.vnc
+RUN echo "labpassword" | vncpasswd -f > /home/labuser/.vnc/passwd
+RUN chmod 600 /home/labuser/.vnc/passwd
+
+RUN echo '#!/bin/bash\nxrdb $HOME/.Xresources\nstartxfce4 &' > /home/labuser/.vnc/xstartup && chmod +x /home/labuser/.vnc/xstartup
+
+RUN echo '#!/bin/bash\nrm -rf /tmp/.X1-lock /tmp/.X11-unix/X1\nvncserver :1 -geometry 1280x720 -depth 24\ntail -f /home/labuser/.vnc/*.log || tail -f /dev/null' > /home/labuser/startup.sh && chmod +x /home/labuser/startup.sh
+
+RUN chown -R labuser:labuser /home/labuser
+USER labuser
+WORKDIR /home/labuser
+EXPOSE 5901
+CMD ["/home/labuser/startup.sh"]
