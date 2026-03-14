@@ -109,12 +109,13 @@ export const startLab = async (req: AuthRequest, res: Response) => {
         const userId = req.user!.id;
         const labId = req.params.id;
 
-        // Check for approved booking
+        // Students must have an approved and provisioned booking in the active time window.
         const now = new Date();
         const booking = await Booking.findOne({
             user: userId,
             lab: labId,
-            status: { $in: ['confirmed', 'granted', 'active'] },
+            approvalStatus: 'approved',
+            provisioningStatus: 'provisioned',
             startTime: { $lte: now },
             endTime: { $gt: now }
         });
@@ -131,12 +132,12 @@ export const startLab = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'Lab not found' });
         }
 
-        const userAllowedByProgramme = (req.user?.role === 'facilitator' || req.user?.role === 'student') && 
+        const staffAllowedByProgramme = (req.user?.role === 'facilitator' || req.user?.role === 'lab technician') &&
             (req.user?.programmes || []).some(p => typeMapping[p] === lab.type);
 
-        if (!booking && req.user?.role !== 'admin' && !userAllowedByProgramme) {
+        if (!booking && req.user?.role !== 'admin' && !staffAllowedByProgramme) {
             return res.status(403).json({
-                message: 'Access denied. You do not have a confirmed booking or enrollment for this lab.'
+                message: 'Access denied. You do not have an approved and provisioned booking for this lab.'
             });
         }
 

@@ -85,3 +85,20 @@ export const hasPermission = (permission: string) => {
         res.status(403).json({ message: `Access denied. Permission '${permission}' required.` });
     };
 };
+
+export const hasAnyPermission = (...permissions: string[]) => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({ message: 'Not authenticated' });
+        }
+
+        if (req.user.role === 'admin') return next();
+
+        const userPermissions = req.user.permissions || [];
+        if (permissions.some((permission) => userPermissions.includes(permission))) {
+            return next();
+        }
+
+        res.status(403).json({ message: `Access denied. One of [${permissions.join(', ')}] is required.` });
+    };
+};

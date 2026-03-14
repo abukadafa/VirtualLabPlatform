@@ -21,7 +21,8 @@ export const ALL_PERMISSIONS = [
     'monitoring_always',
     'export_users',
     'manage_all_bookings',
-    'view_booking_history'
+    'view_booking_history',
+    'provision_labs'
 ];
 
 export const getRoles = async (req: Request, res: Response) => {
@@ -114,7 +115,7 @@ export const seedRoles = async (req: Request, res: Response) => {
                 name: 'facilitator',
                 description: 'Instructor access for assigned programmes',
                 isSystemRole: true,
-                color: 'from-blue-600 to-purple-600',
+                color: 'from-emerald-600 to-emerald-700',
                 permissions: [
                     'view_dashboard',
                     'view_labs',
@@ -123,7 +124,8 @@ export const seedRoles = async (req: Request, res: Response) => {
                     'view_feedback',
                     'submit_feedback',
                     'manage_users',
-                    'export_users'
+                    'export_users',
+                    'manage_labs'
                 ]
             },
             {
@@ -139,7 +141,9 @@ export const seedRoles = async (req: Request, res: Response) => {
                     'view_feedback',
                     'submit_feedback',
                     'manage_users',
-                    'export_users'
+                    'export_users',
+                    'manage_labs',
+                    'provision_labs'
                 ]
             },
             {

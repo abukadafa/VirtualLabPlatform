@@ -14,11 +14,12 @@ export const getPublicSettings = async (req: any, res: Response) => {
 
         res.json({
             ...(general || { 
-                appName: 'Virtual Lab Platform', 
-                logoUrl: '', 
-                faviconUrl: '', 
-                primaryColor: '#3b82f6', 
-                secondaryColor: '#8b5cf6' 
+                appName: 'ACETEL Virtual Laboratory Platform', 
+                logoUrl: 'https://nou.edu.ng/wp-content/uploads/2021/12/Logo-1.png', 
+                secondaryLogoUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png',
+                faviconUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png', 
+                primaryColor: '#068a50', 
+                secondaryColor: '#056aab' 
             }),
             roles: roles.length > 0 ? roles : [
                 { name: 'student' },
@@ -38,12 +39,29 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
         const smtp = await configService.get('smtp');
         const s3 = await configService.get('s3');
         const templates = await configService.get('notification_templates');
+        const proxmox = await configService.get('proxmox');
 
         res.json({
-            general: general || { appName: 'Virtual Lab Platform', logoUrl: '', faviconUrl: '', primaryColor: '#3b82f6', secondaryColor: '#8b5cf6' },
+            general: general || { 
+                appName: 'ACETEL Virtual Laboratory Platform', 
+                logoUrl: 'https://nou.edu.ng/wp-content/uploads/2021/12/Logo-1.png', 
+                secondaryLogoUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png',
+                faviconUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png', 
+                primaryColor: '#068a50', 
+                secondaryColor: '#056aab' 
+            },
             smtp: smtp ? { ...smtp, auth: { user: (smtp as any).auth?.user || '', pass: '***' } } : null,
             s3: s3 ? { ...s3, credentials: { accessKeyId: (s3 as any).credentials?.accessKeyId || '', secretAccessKey: '***' } } : null,
-            notification_templates: templates || {}
+            notification_templates: templates || {},
+            proxmox: proxmox ? {
+                ...proxmox,
+                apiTokenSecret: (proxmox as any).apiTokenSecret ? '***' : '',
+                vpn: {
+                    ...(proxmox as any).vpn,
+                    privateKey: (proxmox as any).vpn?.privateKey ? '***' : '',
+                    presharedKey: (proxmox as any).vpn?.presharedKey ? '***' : ''
+                }
+            } : null
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching settings', error: error.message });
@@ -60,7 +78,7 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
             return res.status(401).json({ message: 'Unauthorized' });
         }
 
-        if (!['general', 'smtp', 's3', 'notification_templates'].includes(key)) {
+        if (!['general', 'smtp', 's3', 'notification_templates', 'proxmox'].includes(key)) {
             return res.status(400).json({ message: 'Invalid settings key' });
         }
 
@@ -74,6 +92,17 @@ export const updateSettings = async (req: AuthRequest, res: Response) => {
             const existing = await configService.get<any>('s3') || {};
             if (value.credentials?.secretAccessKey === '***') {
                 value.credentials.secretAccessKey = existing.credentials?.secretAccessKey;
+            }
+        } else if (key === 'proxmox') {
+            const existing = await configService.get<any>('proxmox') || {};
+            if (value.apiTokenSecret === '***') {
+                value.apiTokenSecret = existing.apiTokenSecret;
+            }
+            if (value.vpn?.privateKey === '***') {
+                value.vpn.privateKey = existing.vpn?.privateKey;
+            }
+            if (value.vpn?.presharedKey === '***') {
+                value.vpn.presharedKey = existing.vpn?.presharedKey;
             }
         }
 

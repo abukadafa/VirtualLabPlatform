@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
@@ -19,12 +20,19 @@ import resourceManagerService from './services/resource-manager.service';
 import { apiRateLimit, authRateLimit } from './middleware/rate-limit.middleware';
 import cron from 'node-cron';
 import securityService from './services/security.service';
+import terminalGatewayService from './services/terminal-gateway.service';
+import backgroundJobs from './services/background-jobs.service';
+import bookingLifecycleService from './services/booking-lifecycle.service';
+import localProvisioningQueueService from './services/local-provisioning-queue.service';
 
 dotenv.config();
 
 // Initialize services
 initNotifications();
 resourceManagerService.init();
+backgroundJobs.start();
+bookingLifecycleService.start();
+localProvisioningQueueService.init();
 
 // Schedule Security Audit - Every Sunday at midnight (0 0 * * 0)
 cron.schedule('0 0 * * 0', async () => {
@@ -95,7 +103,27 @@ connectDB().then(() => {
 
 // Start server
 console.log('Starting app listen...');
-app.listen(PORT, () => {
+
+// 404 Handler - Must be after all routes
+app.use((req, res) => {
+    res.status(404).json({
+        message: `Route ${req.originalUrl} not found`,
+    });
+});
+
+// Global Error Handler - Must be last
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Unhandled Error:', err);
+    res.status(err.status || 500).json({
+        message: err.message || 'Internal Server Error',
+        error: process.env.NODE_ENV === 'development' ? err : undefined,
+    });
+});
+
+const server = http.createServer(app);
+terminalGatewayService.initialize(server);
+
+server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
 

@@ -36,8 +36,8 @@ const labs = [
 
 const emailTemplates = {
     'welcome': {
-        subject: 'Welcome to Virtual Lab Platform',
-        body: 'Hello {{name}},\n\nWelcome to the platform. Your account is now active.'
+        subject: 'Welcome to ACETEL Virtual Laboratory Platform',
+        body: 'Hello {{name}},\n\nWelcome to the ACETEL Virtual Laboratory Platform. Your account is now active.'
     },
     'password_reset': {
         subject: 'Password Reset Request',
@@ -72,19 +72,19 @@ const defaultRoles = [
         name: 'facilitator',
         description: 'Instructor access',
         isSystemRole: true,
-        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'view_submissions', 'grade_submissions', 'view_feedback']
+        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'manage_labs', 'view_submissions', 'grade_submissions', 'view_feedback']
     },
     {
         name: 'lab technician',
         description: 'Technical staff access',
         isSystemRole: true,
-        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'view_submissions', 'grade_submissions', 'view_feedback']
+        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'manage_labs', 'provision_labs', 'view_submissions', 'grade_submissions', 'view_feedback']
     },
     {
         name: 'student',
         description: 'Student access',
         isSystemRole: true,
-        permissions: ['view_dashboard', 'view_labs', 'submit_assignments', 'view_grades', 'submit_feedback', 'view_booking_history']
+        permissions: ['view_dashboard', 'view_labs', 'book_labs', 'submit_assignments', 'view_grades', 'submit_feedback', 'view_booking_history']
     }
 ];
 
@@ -107,6 +107,24 @@ const seedDatabase = async () => {
             { upsert: true }
         );
         console.log('✅ Seeded Email Templates');
+
+        // 2b. Seed General Branding
+        await SystemConfig.findOneAndUpdate(
+            { key: 'general' },
+            {
+                key: 'general',
+                value: {
+                    appName: 'ACETEL Virtual Laboratory Platform',
+                    logoUrl: 'https://nou.edu.ng/wp-content/uploads/2021/12/Logo-1.png',
+                    secondaryLogoUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png',
+                    faviconUrl: 'https://nou.edu.ng/wp-content/uploads/2022/02/logo.png',
+                    primaryColor: '#068a50',
+                    secondaryColor: '#056aab'
+                }
+            },
+            { upsert: true }
+        );
+        console.log('✅ Seeded General Branding');
 
         // 3. Seed Roles
         for (const roleData of defaultRoles) {

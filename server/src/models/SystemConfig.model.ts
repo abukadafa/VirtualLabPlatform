@@ -11,7 +11,7 @@ const SystemConfigSchema: Schema = new Schema({
         type: String,
         required: true,
         unique: true,
-        enum: ['general', 'smtp', 's3', 'notification_templates']
+        enum: ['general', 'smtp', 's3', 'notification_templates', 'proxmox']
     },
     value: {
         type: Schema.Types.Mixed,

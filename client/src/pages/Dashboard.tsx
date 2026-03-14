@@ -17,10 +17,10 @@ import {
     Award,
     MessageSquare,
     FileCheck,
-    Play,
-    ShieldCheck
+    Play
 } from 'lucide-react';
 import { API_URL, AWS_LAUNCH_URL, NOUN_ELEARN_URL } from '../lib/config';
+import Footer from '../components/Footer';
 
 interface Lab {
     _id: string;
@@ -38,9 +38,31 @@ interface Booking {
     startTime: string;
     endTime: string;
     status: string;
+    approvalStatus?: 'pending' | 'approved' | 'rejected';
+    provisioningType?: 'aws' | 'local' | null;
+    provisioningStatus?: 'not_started' | 'pending' | 'provisioned' | 'failed' | 'expired' | 'deleted';
+    expiresAt?: string;
+    extensionStatus?: 'none' | 'requested' | 'approved' | 'rejected';
+    extensionRequestedUntil?: string;
+    extensionReason?: string;
     purpose?: string;
     adminNote?: string;
     provisionedUrl?: string;
+    awsProvisioning?: {
+        launchUrl?: string;
+        accountLabel?: string;
+    };
+    localProvisioning?: {
+        templateName?: string;
+        vmId?: string;
+        username?: string;
+        password?: string;
+        ipAddress?: string;
+        sshPort?: number;
+        cpuCores?: number;
+        memoryMb?: number;
+        diskGb?: number;
+    };
 }
 
 interface GradedResult {
@@ -246,16 +268,77 @@ const Dashboard: React.FC = () => {
         }
     };
 
+    const isBookingProvisioned = (booking: Booking) =>
+        booking.approvalStatus === 'approved' && booking.provisioningStatus === 'provisioned';
+
+    const getBookingDisplayStatus = (booking: Booking) => {
+        if (booking.approvalStatus === 'rejected') return 'rejected';
+        if (booking.extensionStatus === 'requested') return 'extension requested';
+        if (booking.provisioningStatus === 'provisioned') return booking.provisioningType === 'local' ? 'local ready' : 'aws ready';
+        if (booking.approvalStatus === 'approved') return 'approved';
+        if (booking.provisioningStatus === 'pending') return 'provisioning';
+        return booking.status;
+    };
+
+    const handleLaunchBooking = (booking: Booking) => {
+        if (booking.provisioningType === 'aws') {
+            window.open(booking.awsProvisioning?.launchUrl || booking.provisionedUrl || AWS_LAUNCH_URL, '_blank');
+            return;
+        }
+
+        if (booking.provisioningType === 'local') {
+            navigate(`/bookings/${booking._id}/terminal`);
+            return;
+        }
+
+        window.open(AWS_LAUNCH_URL, '_blank');
+    };
+
+    const requestExtension = async (booking: Booking) => {
+        const requestedEndTime = window.prompt('Enter the new end date/time in ISO-like format, e.g. 2026-03-15T18:00');
+        if (!requestedEndTime) return;
+        const reason = window.prompt('Reason for extension request') || '';
+        const requestedDate = new Date(requestedEndTime);
+        if (Number.isNaN(requestedDate.getTime())) {
+            window.alert('Invalid date/time format');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/api/bookings/${booking._id}/request-extension`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    requestedEndTime: requestedDate.toISOString(),
+                    reason
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                window.alert(data.message || 'Failed to request extension');
+                return;
+            }
+
+            fetchBookings();
+        } catch (error: any) {
+            window.alert(`Failed to request extension: ${error.message}`);
+        }
+    };
+
     const getLabIcon = (type: string) => {
         switch (type) {
             case 'AI':
-                return <Cpu className="w-6 h-6 text-green-600" />;
+                return <Cpu className="w-6 h-6 text-primary" />;
             case 'Cybersecurity':
-                return <Shield className="w-6 h-6 text-green-600" />;
+                return <Shield className="w-6 h-6 text-primary" />;
             case 'MIS':
-                return <Database className="w-6 h-6 text-green-600" />;
+                return <Database className="w-6 h-6 text-primary" />;
             default:
-                return <BookOpen className="w-6 h-6 text-green-600" />;
+                return <BookOpen className="w-6 h-6 text-primary" />;
         }
     };
 
@@ -287,34 +370,43 @@ const Dashboard: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-white text-slate-900">
+        <div className="min-h-screen bg-white text-slate-900 flex flex-col">
             {/* Header */}
-            <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+            <header className="bg-white border-b-4 border-primary sticky top-0 z-30 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            {branding?.logoUrl ? (
-                                <img src={branding.logoUrl} alt={branding.appName} className="h-10 object-contain" />
-                            ) : (
-                                <div className="p-2 bg-green-100 rounded-lg">
-                                    <ShieldCheck className="w-6 h-6 text-green-600" />
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-4">
+                                <img 
+                                    src={branding?.logoUrl || "https://nou.edu.ng/wp-content/uploads/2021/12/Logo-1.png"} 
+                                    alt="NOUN Logo" 
+                                    className="h-14 object-contain" 
+                                />
+                                <div className="h-10 w-[1px] bg-slate-200 hidden sm:block"></div>
+                                <div className="flex flex-col">
+                                    <h1 className="text-xl font-black text-primary leading-tight">
+                                        {branding?.appName?.split(' ')[0] || 'ACETEL'}
+                                    </h1>
+                                    <h1 className="text-sm font-bold text-slate-600 tracking-tight">
+                                        {branding?.appName?.split(' ').slice(1).join(' ') || 'Virtual Laboratory Platform'}
+                                    </h1>
                                 </div>
-                            )}
-                            <div>
-                                <h1 className="text-xl font-black text-slate-900">{branding?.appName || 'Virtual Lab Platform'}</h1>
-                                <p className="text-slate-500 text-xs font-bold">
-                                    Welcome back, <span className="text-green-600">{user?.name}</span>
-                                </p>
+                                <div className="h-10 w-[1px] bg-slate-200 hidden sm:block"></div>
+                                <img 
+                                    src={branding?.secondaryLogoUrl || "https://nou.edu.ng/wp-content/uploads/2022/02/logo.png"} 
+                                    alt="ACETEL Logo" 
+                                    className="h-12 object-contain" 
+                                />
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="hidden sm:inline-block px-3 py-1 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-green-200">
+                            <span className="hidden sm:inline-block px-3 py-1 bg-primary/10 text-primary/80 rounded-full text-[10px] font-black uppercase tracking-widest border border-primary/30">
                                 {user?.role}
                             </span>
                             {hasPerm('view_submissions') && (
                                 <button
                                     onClick={() => navigate('/admin/management', { state: { activeTab: 'submissions' } })}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl transition font-bold text-sm shadow-sm"
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-xl transition font-bold text-sm shadow-sm"
                                 >
                                     <FileCheck className="w-4 h-4" />
                                     <span className="hidden sm:inline">Submissions</span>
@@ -322,7 +414,7 @@ const Dashboard: React.FC = () => {
                             )}                            {(hasPerm('manage_users') || hasPerm('manage_labs') || hasPerm('provision_labs') || hasPerm('manage_roles') || hasPerm('view_feedback') || hasPerm('view_analytics') || hasPerm('view_submissions')) ? (
                                 <button
                                     onClick={() => navigate('/admin/management')}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl transition font-bold text-sm shadow-sm"
+                                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-xl transition font-bold text-sm shadow-sm"
                                 >
                                     <Settings className="w-4 h-4" />
                                     <span className="hidden sm:inline">Manage</span>
@@ -351,8 +443,8 @@ const Dashboard: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-green-50 rounded-2xl">
-                                <BookOpen className="w-6 h-6 text-green-600" />
+                            <div className="p-3 bg-primary/10 rounded-2xl">
+                                <BookOpen className="w-6 h-6 text-primary" />
                             </div>
                             <div>
                                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Available Labs</p>
@@ -362,8 +454,8 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-4">
-                            <div className="p-3 bg-green-50 rounded-2xl">
-                                <Calendar className="w-6 h-6 text-green-600" />
+                            <div className="p-3 bg-primary/10 rounded-2xl">
+                                <Calendar className="w-6 h-6 text-primary" />
                             </div>
                             <div>
                                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
@@ -378,8 +470,8 @@ const Dashboard: React.FC = () => {
                     {(user?.role === 'facilitator' || user?.role === 'admin' || user?.role === 'lab technician') ? (
                         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-green-50 rounded-2xl">
-                                    <FileCheck className="w-6 h-6 text-green-600" />
+                                <div className="p-3 bg-primary/10 rounded-2xl">
+                                    <FileCheck className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
                                     <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Pending Reviews</p>
@@ -390,8 +482,8 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-green-50 rounded-2xl">
-                                    <Award className="w-6 h-6 text-green-600" />
+                                <div className="p-3 bg-primary/10 rounded-2xl">
+                                    <Award className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
                                     <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">My Progress</p>
@@ -417,7 +509,7 @@ const Dashboard: React.FC = () => {
                                     {user.programmes.map((prog) => (
                                         <label
                                             key={prog}
-                                            className={`transition-all ${user.programmes && user.programmes.length > 1 ? 'cursor-pointer' : ''} ${selectedProgramme === prog ? 'ring-2 ring-green-500 rounded-3xl transform scale-[1.02]' : 'opacity-70 hover:opacity-100'}`}
+                                            className={`transition-all ${user.programmes && user.programmes.length > 1 ? 'cursor-pointer' : ''} ${selectedProgramme === prog ? 'ring-2 ring-primary rounded-3xl transform scale-[1.02]' : 'opacity-70 hover:opacity-100'}`}
                                         >
                                             <input
                                                 type="radio"
@@ -428,10 +520,10 @@ const Dashboard: React.FC = () => {
                                                 disabled={user.programmes && user.programmes.length === 1}
                                             />
                                             <div className="h-full rounded-2xl p-6 border flex flex-col items-center justify-center text-center gap-3 bg-slate-50 border-slate-100">
-                                                {prog.includes('Intelligence') && <Cpu className="w-8 h-8 text-green-600" />}
-                                                {prog.includes('Cybersecurity') && <Shield className="w-8 h-8 text-green-600" />}
-                                                {(prog.includes('Information') || prog.includes('MIS')) && <Database className="w-8 h-8 text-green-600" />}
-                                                {!prog.includes('Intelligence') && !prog.includes('Cybersecurity') && !prog.includes('Information') && !prog.includes('MIS') && <BookOpen className="w-8 h-8 text-green-600" />}
+                                                {prog.includes('Intelligence') && <Cpu className="w-8 h-8 text-primary" />}
+                                                {prog.includes('Cybersecurity') && <Shield className="w-8 h-8 text-primary" />}
+                                                {(prog.includes('Information') || prog.includes('MIS')) && <Database className="w-8 h-8 text-primary" />}
+                                                {!prog.includes('Intelligence') && !prog.includes('Cybersecurity') && !prog.includes('Information') && !prog.includes('MIS') && <BookOpen className="w-8 h-8 text-primary" />}
                                                 <h3 className="font-black text-slate-900 text-[10px] uppercase tracking-widest">{prog}</h3>
                                             </div>
                                         </label>
@@ -449,15 +541,15 @@ const Dashboard: React.FC = () => {
                         {(user?.role === 'facilitator' || user?.role === 'lab technician') && (
                             <button
                                 onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
-                                className="flex items-center gap-2 px-4 py-1.5 bg-green-50 border border-green-200 hover:bg-green-100 rounded-full transition-colors group/btn"
+                                className="flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/30 hover:bg-primary/20 rounded-full transition-colors group/btn"
                             >
-                                <Calendar className="w-4 h-4 text-green-600 group-hover/btn:scale-110 transition-transform" />
-                                <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Schedule for Lab</span>
+                                <Calendar className="w-4 h-4 text-primary group-hover/btn:scale-110 transition-transform" />
+                                <span className="text-[10px] font-black text-primary/80 uppercase tracking-widest">Schedule for Lab</span>
                             </button>
                         )}
                     </div>
                     {isLoading ? (
-                        <div className="text-center text-green-600 py-12 font-bold animate-pulse">Initializing Lab Environment...</div>
+                        <div className="text-center text-primary py-12 font-bold animate-pulse">Initializing Lab Environment...</div>
                     ) : filteredLabs.length === 0 ? (
                         <div className="bg-white rounded-3xl p-12 border border-slate-200 text-center shadow-sm">
                             <p className="text-slate-500 font-bold">
@@ -469,27 +561,23 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredLabs.map((lab) => {
-                                const hasActiveBooking = bookings.some(b =>
+                                const hasProvisionedBooking = bookings.some(b =>
                                     b.lab._id === lab._id &&
-                                    ['confirmed', 'requested', 'granted', 'active'].includes(b.status)
+                                    isBookingProvisioned(b)
                                 );
                                 
                                 const isFacilitatorInProgramme = (user?.role === 'facilitator' || user?.role === 'lab technician') && 
                                     user.programmes?.some(p => getProgrammeType(p) === lab.type);
 
-                                const isStudentInProgramme = user?.role === 'student' && 
-                                    user.programmes?.some(p => getProgrammeType(p) === lab.type);
-
-                                // Admins, facilitators in programme, and enrolled students can launch directly.
-                                const canLaunch = user?.role === 'admin' || isFacilitatorInProgramme || isStudentInProgramme || hasActiveBooking;
+                                const canLaunch = user?.role === 'admin' || isFacilitatorInProgramme || hasProvisionedBooking;
 
                                 return (
                                     <div
                                         key={lab._id}
-                                        className="bg-white rounded-3xl p-8 border border-slate-200 hover:border-green-300 hover:shadow-md transition-all flex flex-col group"
+                                        className="bg-white rounded-3xl p-8 border border-slate-200 hover:border-primary/40 hover:shadow-md transition-all flex flex-col group"
                                     >
                                         <div className="flex items-start justify-between mb-6">
-                                            <div className="p-4 bg-green-50 rounded-2xl group-hover:bg-green-100 transition-colors">{getLabIcon(lab.type)}</div>
+                                            <div className="p-4 bg-primary/10 rounded-2xl group-hover:bg-primary/20 transition-colors">{getLabIcon(lab.type)}</div>
                                             <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-200">
                                                 {lab.type}
                                             </span>
@@ -505,16 +593,16 @@ const Dashboard: React.FC = () => {
                                                 (() => {
                                                     const relevantBooking = bookings.find(b => 
                                                         b.lab._id === lab._id && 
-                                                        ['confirmed', 'requested', 'granted', 'active'].includes(b.status)
+                                                        (b.approvalStatus === 'approved' || b.approvalStatus === 'pending') &&
+                                                        b.status !== 'cancelled'
                                                     );
 
-                                                    // Launch directly for admin, facilitators in programme, enrolled students, or anyone with an active/granted booking
-                                                        if (user?.role === 'admin' || isFacilitatorInProgramme || isStudentInProgramme || (relevantBooking && (relevantBooking.status === 'granted' || relevantBooking.status === 'active'))) {
+                                                    if (user?.role === 'admin' || isFacilitatorInProgramme || (relevantBooking && isBookingProvisioned(relevantBooking))) {
                                                         return (
                                                             <div className="flex flex-col gap-3">
                                                                 <button
-                                                                    onClick={() => window.open(AWS_LAUNCH_URL, '_blank')}
-                                                                    className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
+                                                                    onClick={() => relevantBooking ? handleLaunchBooking(relevantBooking) : window.open(AWS_LAUNCH_URL, '_blank')}
+                                                                    className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
                                                                 >
                                                                     <Play className="w-4 h-4 fill-current" />
                                                                     Launch Lab
@@ -542,7 +630,7 @@ const Dashboard: React.FC = () => {
                                                                 </div>
                                                             </div>
                                                         );
-                                                    } else if (relevantBooking && relevantBooking.status === 'pending') {
+                                                    } else if (relevantBooking && relevantBooking.approvalStatus === 'pending') {
                                                         return (
                                                             <div className="flex flex-col gap-3">
                                                                 <div className="w-full px-6 py-4 bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl text-[10px] font-black text-center flex flex-col gap-1 shadow-sm uppercase tracking-widest">
@@ -554,21 +642,21 @@ const Dashboard: React.FC = () => {
                                                                 </div>
                                                             </div>
                                                         );
-                                                    } else if (relevantBooking && relevantBooking.status === 'confirmed') {
+                                                    } else if (relevantBooking && relevantBooking.approvalStatus === 'approved') {
                                                         return (
-                                                            <button
-                                                                onClick={() => navigate(`/lab/${lab._id}`)}
-                                                                className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl text-sm font-black transition shadow-sm text-center flex items-center justify-center gap-2 uppercase tracking-widest"
-                                                            >
-                                                                <Play className="w-4 h-4 fill-current" />
-                                                                Launch Lab
-                                                            </button>
+                                                            <div className="w-full px-6 py-4 bg-sky-50 border border-sky-200 text-sky-700 rounded-2xl text-[10px] font-black text-center flex flex-col gap-1 shadow-sm uppercase tracking-widest">
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                                    Awaiting Provisioning
+                                                                </div>
+                                                                <span className="text-[10px] opacity-70">Technician approval complete. Provisioning pending.</span>
+                                                            </div>
                                                         );
                                                     } else if (hasPerm('view_labs')) {
                                                         return (
                                                             <button
                                                                 onClick={() => navigate(`/lab/${lab._id}`)}
-                                                                className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
+                                                                className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
                                                             >
                                                                 <Play className="w-4 h-4" />
                                                                 Access Lab
@@ -585,7 +673,7 @@ const Dashboard: React.FC = () => {
                                                             setIsBookingModalOpen(true);
                                                             setBookingError(null);
                                                         }}
-                                                        className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl text-sm font-black transition shadow-sm text-center flex items-center justify-center gap-2 uppercase tracking-widest"
+                                                        className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition shadow-sm text-center flex items-center justify-center gap-2 uppercase tracking-widest"
                                                     >
                                                         <Calendar className="w-4 h-4" />
                                                         Book Session
@@ -605,7 +693,7 @@ const Dashboard: React.FC = () => {
                 {hasPerm('view_booking_history') && user?.role !== 'facilitator' && user?.role !== 'lab technician' && (
                     <div className="mb-12">
                         <h2 className="text-sm font-black text-slate-900 mb-6 uppercase tracking-widest flex items-center gap-3">
-                            <Calendar className="w-6 h-6 text-green-600" />
+                            <Calendar className="w-6 h-6 text-primary" />
                             My Booking History
                         </h2>
                         {bookings.length === 0 ? (
@@ -647,34 +735,45 @@ const Dashboard: React.FC = () => {
                                                     </td>
                                                     <td className="px-8 py-5 text-sm">
                                                         <span
-                                                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${booking.status === 'granted' || booking.status === 'active'
-                                                                ? 'bg-green-50 text-green-700 border-green-200'
-                                                                : booking.status === 'requested' || booking.status === 'pending'
+                                                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${booking.provisioningStatus === 'provisioned'
+                                                                ? 'bg-primary/10 text-primary/80 border-primary/30'
+                                                                : booking.extensionStatus === 'requested' || booking.approvalStatus === 'pending' || booking.provisioningStatus === 'pending'
                                                                     ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                                                    : booking.status === 'confirmed'
-                                                                        ? 'bg-green-100 text-green-800 border-green-300'
-                                                                        : booking.status === 'cancelled'
+                                                                    : booking.approvalStatus === 'approved'
+                                                                        ? 'bg-primary/20 text-primary/90 border-primary/40'
+                                                                        : booking.approvalStatus === 'rejected' || booking.status === 'cancelled'
                                                                             ? 'bg-red-50 text-red-700 border-red-200'
                                                                             : 'bg-slate-50 text-slate-500 border-slate-200'
                                                                 }`}
                                                         >
-                                                            {booking.status === 'cancelled' && booking.adminNote ? 'Rejected' : booking.status}
+                                                            {getBookingDisplayStatus(booking)}
                                                         </span>
                                                     </td>
                                                     <td className="px-8 py-5 text-sm">
-                                                        {booking.status === 'granted' || booking.status === 'active' || booking.status === 'confirmed' ? (
-                                                            <button 
-                                                                onClick={() => window.open(AWS_LAUNCH_URL, '_blank')}
-                                                                className="text-green-600 hover:text-green-700 font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-colors"
-                                                            >
-                                                                <Play className="w-3.5 h-3.5 fill-current" />
-                                                                Launch
-                                                            </button>
-                                                        ) : (
-                                                            <span className="text-slate-400 text-[10px] font-bold italic truncate max-w-[150px] block" title={booking.adminNote}>
-                                                                {booking.adminNote || 'No notes'}
-                                                            </span>
-                                                        )}
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            {isBookingProvisioned(booking) && (
+                                                                <button
+                                                                    onClick={() => handleLaunchBooking(booking)}
+                                                                    className="text-primary hover:text-primary/80 font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-colors"
+                                                                >
+                                                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                                                    Launch
+                                                                </button>
+                                                            )}
+                                                            {isBookingProvisioned(booking) && booking.extensionStatus !== 'requested' && (
+                                                                <button
+                                                                    onClick={() => requestExtension(booking)}
+                                                                    className="text-slate-600 hover:text-slate-900 font-black uppercase tracking-widest text-[10px] transition-colors"
+                                                                >
+                                                                    Request Extension
+                                                                </button>
+                                                            )}
+                                                            {!isBookingProvisioned(booking) && (
+                                                                <span className="text-slate-400 text-[10px] font-bold italic truncate max-w-[180px] block" title={booking.adminNote}>
+                                                                    {booking.adminNote || 'No notes'}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -691,14 +790,14 @@ const Dashboard: React.FC = () => {
                     results.length > 0 && (
                         <div>
                             <h2 className="text-sm font-black text-slate-900 mb-6 uppercase tracking-widest flex items-center gap-3">
-                                <Award className="w-6 h-6 text-green-600" />
+                                <Award className="w-6 h-6 text-primary" />
                                 Performance & Feedback
                             </h2>
                             <div className="grid grid-cols-1 gap-4">
                                 {results.map(result => (
                                     <div key={result._id} className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
                                         <div className="flex items-center gap-6">
-                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl border-2 ${result.grade >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl border-2 ${result.grade >= 70 ? 'bg-primary/10 text-primary/80 border-primary/30' :
                                                 result.grade >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                                     'bg-red-50 text-red-700 border-red-200'
                                                 }`}>
@@ -712,11 +811,11 @@ const Dashboard: React.FC = () => {
                                         <div className="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto">
                                             {result.feedback && (
                                                 <div className="flex-1 md:max-w-md text-sm font-bold text-slate-600 bg-slate-50 px-6 py-3 rounded-2xl border border-slate-100">
-                                                    <MessageSquare className="w-4 h-4 inline-block mr-2 text-green-600" />
+                                                    <MessageSquare className="w-4 h-4 inline-block mr-2 text-primary" />
                                                     {result.feedback}
                                                 </div>
                                             )}
-                                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${result.grade >= 70 ? 'bg-green-50 text-green-700 border-green-200' :
+                                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${result.grade >= 70 ? 'bg-primary/10 text-primary/80 border-primary/30' :
                                                 result.grade >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                                     'bg-red-50 text-red-700 border-red-200'
                                                 }`}>
@@ -743,7 +842,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex items-center justify-between p-8 border-b border-slate-100">
                                 <div>
                                     <h2 className="text-xl font-black flex items-center gap-3 text-slate-900 uppercase tracking-tight">
-                                        <Calendar className="w-6 h-6 text-green-600" />
+                                        <Calendar className="w-6 h-6 text-primary" />
                                         Lab Booking
                                     </h2>
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{selectedLabForBooking.name}</p>
@@ -773,7 +872,7 @@ const Dashboard: React.FC = () => {
                                             min={new Date().toISOString().split('T')[0]}
                                             value={bookingData.date}
                                             onChange={e => setBookingData({ ...bookingData, date: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -783,7 +882,7 @@ const Dashboard: React.FC = () => {
                                             placeholder="Session reason"
                                             value={bookingData.purpose}
                                             onChange={e => setBookingData({ ...bookingData, purpose: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold placeholder-slate-300"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold placeholder-slate-300"
                                         />
                                     </div>
                                 </div>
@@ -796,7 +895,7 @@ const Dashboard: React.FC = () => {
                                             type="time"
                                             value={bookingData.startTime}
                                             onChange={e => setBookingData({ ...bookingData, startTime: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold"
                                         />
                                     </div>
                                     <div className="space-y-2">
@@ -806,7 +905,7 @@ const Dashboard: React.FC = () => {
                                             type="time"
                                             value={bookingData.endTime}
                                             onChange={e => setBookingData({ ...bookingData, endTime: e.target.value })}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold"
                                         />
                                     </div>
                                 </div>
@@ -822,7 +921,7 @@ const Dashboard: React.FC = () => {
                                     <button
                                         type="submit"
                                         disabled={isBookingSubmitting}
-                                        className="flex-1 px-6 py-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-2xl font-black transition shadow-sm flex items-center justify-center gap-2 uppercase tracking-widest"
+                                        className="flex-1 px-6 py-4 bg-primary hover:bg-primary/80 disabled:bg-primary/60 text-white rounded-2xl font-black transition shadow-sm flex items-center justify-center gap-2 uppercase tracking-widest"
                                     >
                                         {isBookingSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Confirm'}
                                     </button>
@@ -844,7 +943,7 @@ const Dashboard: React.FC = () => {
                         <div className="flex items-center justify-between p-8 border-b border-slate-100">
                             <div>
                                 <h2 className="text-xl font-black flex items-center gap-3 text-slate-900 uppercase tracking-tight">
-                                    <MessageSquare className="w-6 h-6 text-green-600" />
+                                    <MessageSquare className="w-6 h-6 text-primary" />
                                     User Feedback
                                 </h2>
                             </div>
@@ -858,7 +957,7 @@ const Dashboard: React.FC = () => {
 
                         <form onSubmit={handleFeedbackSubmit} className="p-8 space-y-6">
                             {feedbackStatus && (
-                                <div className={`p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border ${feedbackStatus.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'
+                                <div className={`p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border ${feedbackStatus.type === 'success' ? 'bg-primary/10 border-primary/30 text-primary/80' : 'bg-red-50 border-red-200 text-red-700'
                                     }`}>
                                     {feedbackStatus.message}
                                 </div>
@@ -871,7 +970,7 @@ const Dashboard: React.FC = () => {
                                     type="text"
                                     value={feedbackData.subject}
                                     onChange={e => setFeedbackData({ ...feedbackData, subject: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold"
                                 />
                             </div>
 
@@ -882,14 +981,14 @@ const Dashboard: React.FC = () => {
                                     rows={4}
                                     value={feedbackData.message}
                                     onChange={e => setFeedbackData({ ...feedbackData, message: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-green-500 outline-none text-slate-900 font-bold resize-none"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-primary outline-none text-slate-900 font-bold resize-none"
                                 />
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={isFeedbackSubmitting}
-                                className="w-full px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-2xl font-black transition shadow-sm uppercase tracking-widest"
+                                className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl font-black transition shadow-sm uppercase tracking-widest"
                             >
                                 {isFeedbackSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Send Feedback'}
                             </button>
@@ -897,6 +996,7 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+            <Footer />
         </div>
     );
 };

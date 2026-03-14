@@ -8,18 +8,20 @@ import {
     requestLabInstance,
     grantLabInstance,
     deleteBooking,
+    requestBookingExtension,
 } from '../controllers/booking.controller';
-import { authenticate, authorize, hasPermission } from '../middleware/auth.middleware';
+import { authenticate, hasPermission, hasAnyPermission } from '../middleware/auth.middleware';
 
 const router = express.Router();
 
 router.post('/', authenticate, hasPermission('book_labs'), createBooking);
 router.get('/my-bookings', authenticate, getMyBookings);
-router.get('/', authenticate, hasPermission('manage_labs'), getAllBookings);
-router.patch('/:id', authenticate, hasPermission('manage_labs'), updateBooking);
+router.get('/', authenticate, hasAnyPermission('manage_labs', 'provision_labs'), getAllBookings);
+router.patch('/:id', authenticate, hasAnyPermission('manage_labs', 'provision_labs'), updateBooking);
+router.patch('/:id/request-extension', authenticate, hasPermission('book_labs'), requestBookingExtension);
 router.patch('/:id/request-instance', authenticate, hasPermission('request_lab_instance'), requestLabInstance);
 router.patch('/:id/grant-instance', authenticate, hasPermission('provision_labs'), grantLabInstance);
-router.patch('/:id/cancel', authenticate, hasPermission('manage_labs'), cancelBooking);
-router.delete('/:id', authenticate, hasPermission('manage_labs'), deleteBooking);
+router.patch('/:id/cancel', authenticate, hasAnyPermission('manage_labs', 'provision_labs'), cancelBooking);
+router.delete('/:id', authenticate, hasAnyPermission('manage_labs', 'provision_labs'), deleteBooking);
 
 export default router;
