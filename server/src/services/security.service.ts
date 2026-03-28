@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import util from 'util';
 import emailService from './email.service';
-import AuditLog from '../models/AuditLog.model'; // Assuming we have or will create this
+import auditLogService from './audit-log.service';
 
 const execPromise = util.promisify(exec);
 
@@ -24,12 +24,12 @@ class SecurityService {
                 await this.handleSecurityAlert(report);
             } else {
                 console.log('✅ Security audit passed: No critical/high vulnerabilities.');
-                try {
-                    await AuditLog.create({ 
-                        action: 'VULNERABILITY_SCAN', 
-                        details: 'Passed: No critical or high vulnerabilities detected.' 
-                    });
-                } catch (e) {}
+                await auditLogService.log({
+                    eventType: 'vulnerability_scan',
+                    severity: 'info',
+                    message: 'Dependency audit passed with no critical or high vulnerabilities.',
+                    eventData: { vulnerabilities }
+                });
             }
 
             return { success: true, report };
@@ -45,12 +45,12 @@ class SecurityService {
                 }
             }
             console.error('Security audit failed to execute:', error);
-            try {
-                await AuditLog.create({ 
-                    action: 'VULNERABILITY_SCAN_FAILED', 
-                    details: `Failed to execute: ${error.message}` 
-                });
-            } catch (e) {}
+            await auditLogService.log({
+                eventType: 'vulnerability_scan_failed',
+                severity: 'error',
+                message: `Dependency audit failed to execute: ${error.message}`,
+                eventData: { error: error.message }
+            });
             return { success: false, error: error.message };
         }
     }
@@ -61,18 +61,13 @@ class SecurityService {
         
         console.error(`🚨 ${message}`);
 
-        // 1. Log to DB
-        try {
-            await AuditLog.create({ 
-                action: 'VULNERABILITY_SCAN', 
-                details: message 
-            });
-        } catch (err) {
-            console.error('Failed to log security alert:', err);
-        }
+        await auditLogService.log({
+            eventType: 'vulnerability_scan',
+            severity: 'critical',
+            message,
+            eventData: { vulnerabilities: stats }
+        });
 
-        // 2. Notify Admin via Email
-        // Assuming there is a generic admin email configured in system settings
         try {
             await emailService.sendEmail(
                 process.env.ADMIN_EMAIL || 'admin@virtuallab.com',

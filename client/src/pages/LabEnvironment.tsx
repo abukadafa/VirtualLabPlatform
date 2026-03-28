@@ -11,10 +11,12 @@ import {
     RefreshCw,
     Maximize2,
     Users,
-    ClipboardCheck
+    ClipboardCheck,
+    FileCheck,
+    LogOut
 } from 'lucide-react';
 import AssignmentUpload from '../components/AssignmentUpload';
-import { API_URL } from '../lib/config';
+import { API_URL, NOUN_ELEARN_URL } from '../lib/config';
 
 interface Lab {
     _id: string;
@@ -48,7 +50,7 @@ interface SessionData {
 const LabEnvironment: React.FC = () => {
     const { labId } = useParams();
     const navigate = useNavigate();
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
 
     const [lab, setLab] = useState<Lab | null>(null);
     const [sessionState, setSessionState] = useState<SessionState>('idle');
@@ -124,20 +126,34 @@ const LabEnvironment: React.FC = () => {
     const verifyAccess = async () => {
         if (!token || !user) return;
 
-        // Map full programme names to lab types (consistent with backend)
-        const typeMapping: { [key: string]: string } = {
-            'Artificial Intelligence': 'AI',
-            'Cybersecurity': 'Cybersecurity',
-            'Management Information System': 'MIS'
-        };
-
         try {
-            // Check if facilitator/technician is in the programme for this lab
-            const isTechnicianOrFacilitatorInProgramme = (user.role === 'facilitator' || user.role === 'lab technician') && 
-                lab && user.programmes?.some(p => typeMapping[p] === lab.type);
+            // Map full programme names to lab types (consistent with backend)
+            const typeMapping: { [key: string]: string } = {
+                'Artificial Intelligence': 'AI',
+                'Cybersecurity': 'Cybersecurity',
+                'Management Information System': 'MIS'
+            };
 
-            if (user.role === 'admin' || isTechnicianOrFacilitatorInProgramme) {
-                return; // Admin and enrolled facilitators have full access
+            const isEnrolledInProgramme = lab && (user.programmes || []).some(p => typeMapping[p] === lab.type);
+
+            // Check if facilitator/technician is in the programme for this lab
+            const isTechnicianOrFacilitatorInProgramme = (user.role === 'facilitator' || user.role === 'lab technician') && isEnrolledInProgramme;
+
+            if (user.role === 'admin' || isTechnicianOrFacilitatorInProgramme || (user.role === 'student' && isEnrolledInProgramme)) {
+                // Fetch bookings anyway to see if there's one to associate
+                const bResponse = await fetch(`${API_URL}/api/bookings/my-bookings`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (bResponse.ok) {
+                    const bookings: any[] = await bResponse.json();
+                    const activeBooking = bookings.find(b =>
+                        b.lab._id === labId &&
+                        b.approvalStatus === 'approved' &&
+                        b.provisioningStatus === 'provisioned'
+                    );
+                    if (activeBooking) setActiveBookingId(activeBooking._id);
+                }
+                return; 
             }
 
             const response = await fetch(`${API_URL}/api/bookings/my-bookings`, {
@@ -344,6 +360,18 @@ const LabEnvironment: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
+                            <div className="hidden md:flex flex-col items-end mr-2">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Logged in as</span>
+                                <span className="text-xs font-black text-primary uppercase tracking-tight">{user?.name || 'Student'}</span>
+                            </div>
+                            <button
+                                onClick={logout}
+                                className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-red-50 text-red-600 rounded-xl transition text-xs font-black uppercase tracking-widest border border-red-100"
+                                title="Logout"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </button>
+                            <div className="w-[1px] h-8 bg-slate-200 mx-1"></div>
                             {sessionState === 'idle' && (
                                 <button
                                     onClick={startSession}
@@ -469,6 +497,13 @@ const LabEnvironment: React.FC = () => {
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                    >
+                                        <FileCheck className="w-4 h-4" />
+                                        {user?.role === 'facilitator' || user?.role === 'lab technician' ? 'Post Lab Activities' : 'Submit to NOUN'}
+                                    </button>
                                     <button
                                         onClick={() => setShowSubmissions(!showSubmissions)}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showSubmissions

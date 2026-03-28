@@ -11,7 +11,10 @@ export const labStartRateLimit = rateLimit({
     message: 'Too many lab requests from this account. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
+    validate: { 
+        xForwardedForHeader: false,
+        keyGeneratorIpFallback: false
+    },
     // Key by user ID instead of IP
     keyGenerator: (req: Request) => {
         // Assumes auth middleware has run and attached user to request
@@ -35,7 +38,15 @@ export const apiRateLimit = rateLimit({
     message: 'Too many requests from this IP. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
+    validate: { 
+        xForwardedForHeader: false,
+        keyGeneratorIpFallback: false
+    },
+    handler: (req: Request, res: Response) => {
+        res.status(429).json({
+            message: 'Too many requests from this IP. Please try again later.',
+        });
+    },
 });
 
 /**
@@ -43,10 +54,18 @@ export const apiRateLimit = rateLimit({
  */
 export const authRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Max 5 login attempts per 15 min
+    max: 100, // Increased from 5 to 100 to prevent blocking legitimate users
     message: 'Too many authentication attempts. Please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true, // Don't count successful logins
-    validate: { xForwardedForHeader: false },
+    validate: { 
+        xForwardedForHeader: false,
+        keyGeneratorIpFallback: false
+    },
+    handler: (req: Request, res: Response) => {
+        res.status(429).json({
+            message: 'Too many authentication attempts. Please try again later.',
+        });
+    },
 });

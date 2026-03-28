@@ -7,7 +7,8 @@ export type SessionState =
     | 'idle_warning'
     | 'paused'
     | 'stopped'
-    | 'deleted';
+    | 'deleted'
+    | 'error';
 
 export interface ISession extends Document {
     userId: mongoose.Types.ObjectId;
@@ -28,6 +29,8 @@ export interface ISession extends Document {
         ipAddress?: string;
         userAgent?: string;
         volumeName?: string;
+        bookingId?: string;
+        error?: string;
     };
     createdAt: Date;
     updatedAt: Date;
@@ -71,7 +74,7 @@ const SessionSchema: Schema = new Schema(
         },
         state: {
             type: String,
-            enum: ['queued', 'starting', 'active', 'idle_warning', 'paused', 'stopped', 'deleted'],
+            enum: ['queued', 'starting', 'active', 'idle_warning', 'paused', 'stopped', 'deleted', 'error'],
             required: true,
             default: 'queued',
             index: true,
@@ -100,6 +103,8 @@ const SessionSchema: Schema = new Schema(
             ipAddress: String,
             userAgent: String,
             volumeName: String,
+            bookingId: String,
+            error: String,
         },
     },
     {

@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import sessionService from '../services/session.service';
 import dockerService from '../services/docker.service';
 import resourceManagerService from '../services/resource-manager.service';
+import configService from './config.service';
 
 /**
  * Background jobs for session management and monitoring
@@ -19,11 +20,35 @@ export class BackgroundJobs {
         return BackgroundJobs.instance;
     }
 
+    private async checkProxmoxStatus(): Promise<void> {
+        try {
+            console.log('[Job] Checking Proxmox health...');
+            const proxmoxService = (await import('./proxmox.service')).default;
+            const health = await proxmoxService.healthCheck();
+            await configService.setDirect('proxmox_status', {
+                status: 'connected',
+                lastCheck: new Date(),
+                ...health
+            });
+            console.log('[Job] Proxmox health check successful');
+        } catch (error: any) {
+            console.error('[Job] Proxmox health check failed:', error.message);
+            await configService.setDirect('proxmox_status', {
+                status: 'error',
+                lastCheck: new Date(),
+                message: error.message
+            });
+        }
+    }
+
     /**
      * Start all background  jobs
      */
     start(): void {
         console.log('🚀 Starting background jobs...');
+
+        // Perform initial checks
+        this.checkProxmoxStatus();
 
         // Job 1: Monitor idle sessions (every 5 minutes)
         const idleMonitorJob = cron.schedule('*/5 * * * *', async () => {
@@ -82,6 +107,12 @@ export class BackgroundJobs {
             }
         });
         this.jobs.push(statsJob);
+
+        // Job 6: Proxmox health check (every 30 minutes)
+        const proxmoxHealthJob = cron.schedule('*/30 * * * *', async () => {
+            await this.checkProxmoxStatus();
+        });
+        this.jobs.push(proxmoxHealthJob);
 
         console.log(`✅ Started ${this.jobs.length} background jobs`);
     }

@@ -44,6 +44,19 @@ export class ConfigService {
     }
 
     /**
+     * Set config directly (for system background tasks)
+     */
+    async setDirect(key: string, value: any): Promise<void> {
+        await SystemConfig.findOneAndUpdate(
+            { key },
+            { value },
+            { upsert: true, new: true }
+        );
+        this.cache.set(key, value);
+        this.lastFetch.set(key, Date.now());
+    }
+
+    /**
      * Helper for SMTP settings
      */
     async getSMTPConfig() {

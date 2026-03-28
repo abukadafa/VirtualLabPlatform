@@ -71,8 +71,8 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// app.use('/api', apiRateLimit); 
-// app.use('/api/auth', authRateLimit);
+app.use('/api', apiRateLimit); 
+app.use('/api/auth', authRateLimit);
 
 // Routes
 console.log('Registering routes...');

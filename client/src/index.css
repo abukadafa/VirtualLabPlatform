@@ -4,32 +4,35 @@
   --color-border: hsl(var(--border));
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-primary: var(--primary-color);
+  --color-secondary: var(--secondary-color);
+  --color-accent: var(--accent-color);
   --color-muted: hsl(var(--muted));
+  --color-accent-foreground: hsl(var(--accent-foreground));
   --color-muted-foreground: hsl(var(--muted-foreground));
 }
 
 @layer base {
   :root {
-    --primary-color: #16a34a; /* green-600 */
-    --secondary-color: #15803d; /* green-700 */
+    --primary-color: #068a50; /* ACETEL Green */
+    --secondary-color: #2ea3f2; /* ACETEL Digital Blue */
+    --accent-color: #E09900; /* NOUN Gold */
 
     --background: 0 0% 100%; /* white */
-    --foreground: 224 71.4% 4.1%; /* dark gray */
+    --foreground: 215 28% 23%; /* #323a45 equivalent */
     --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --primary: 142.1 76.2% 36.3%; /* green-600 */
-    --primary-foreground: 355.7 100% 97.3%;
-    --accent: 142.1 76.2% 36.3%;
-    --accent-foreground: 224 71.4% 4.1%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 8.9% 46.1%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 142.1 76.2% 36.3%;
+    --card-foreground: 215 28% 23%;
+    --primary: 153 92% 28%; /* #068a50 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 202 89% 57%; /* #2ea3f2 */
+    --secondary-foreground: 0 0% 100%;
+    --accent: 41 100% 44%; /* #E09900 */
+    --accent-foreground: 215 28% 23%;
+    --muted: 210 20% 98%;
+    --muted-foreground: 215 16% 47%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 153 92% 28%;
   }
 }
 

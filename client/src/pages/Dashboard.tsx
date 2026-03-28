@@ -17,7 +17,8 @@ import {
     Award,
     MessageSquare,
     FileCheck,
-    Play
+    Play,
+    ChevronDown
 } from 'lucide-react';
 import { API_URL, AWS_LAUNCH_URL, NOUN_ELEARN_URL } from '../lib/config';
 import Footer from '../components/Footer';
@@ -65,6 +66,11 @@ interface Booking {
     };
 }
 
+type LaunchOption = {
+    kind: 'aws' | 'local';
+    label: string;
+};
+
 interface GradedResult {
     _id: string;
     lab: { _id: string; name: string; type: string };
@@ -98,6 +104,8 @@ const Dashboard: React.FC = () => {
     const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
     const [bookingError, setBookingError] = useState<string | null>(null);
     const [results, setResults] = useState<GradedResult[]>([]);
+    const [openLaunchMenuId, setOpenLaunchMenuId] = useState<string | null>(null);
+    const [proxmoxUrl, setProxmoxUrl] = useState<string>('');
     const [bookingData, setBookingData] = useState({
         date: new Date().toISOString().split('T')[0],
         startTime: '09:00',
@@ -156,6 +164,42 @@ const Dashboard: React.FC = () => {
             fetchPendingSubmissions();
         }
     }, []);
+
+    useEffect(() => {
+        const fetchProxmoxSettings = async () => {
+            if (!token) return;
+            try {
+                const response = await fetch(`${API_URL}/api/settings/proxmox/config`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.apiUrl) {
+                        const match = data.apiUrl.match(/^(https?:\/\/[^\/:]+(?::\d+)?)/);
+                        if (match) {
+                            setProxmoxUrl(match[1]);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch Proxmox settings:', error);
+            }
+        };
+
+        if (token && (user?.role === 'admin' || user?.role === 'facilitator' || user?.role === 'lab technician')) {
+            fetchProxmoxSettings();
+        }
+    }, [token, user]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (openLaunchMenuId && !(event.target as Element).closest('.launch-dropdown-container')) {
+                setOpenLaunchMenuId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [openLaunchMenuId]);
 
     const handleBookingSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -268,8 +312,25 @@ const Dashboard: React.FC = () => {
         }
     };
 
-    const isBookingProvisioned = (booking: Booking) =>
-        booking.approvalStatus === 'approved' && booking.provisioningStatus === 'provisioned';
+    const isBookingProvisioned = (booking: Booking) => {
+        const isApproved = booking.approvalStatus === 'approved';
+        const isNotCancelled = booking.status !== 'completed' && booking.status !== 'cancelled';
+        
+        if (!isApproved || !isNotCancelled) return false;
+
+        // AWS check
+        if (booking.provisioningType === 'aws' || booking.awsProvisioning?.launchUrl || (booking.provisionedUrl && !booking.localProvisioning?.ipAddress)) {
+            return booking.provisioningStatus === 'provisioned' || !!booking.awsProvisioning?.launchUrl || !!booking.provisionedUrl;
+        }
+
+        // Local check (Guacamole/Docker)
+        if (booking.provisioningType === 'local' || booking.localProvisioning?.ipAddress) {
+            return booking.provisioningStatus === 'provisioned' || !!booking.localProvisioning?.ipAddress;
+        }
+
+        // Fallback for generic provisioned status
+        return booking.provisioningStatus === 'provisioned' || !!booking.provisionedUrl;
+    };
 
     const getBookingDisplayStatus = (booking: Booking) => {
         if (booking.approvalStatus === 'rejected') return 'rejected';
@@ -280,13 +341,43 @@ const Dashboard: React.FC = () => {
         return booking.status;
     };
 
-    const handleLaunchBooking = (booking: Booking) => {
-        if (booking.provisioningType === 'aws') {
+    const getLaunchOptions = (booking: Booking): LaunchOption[] => {
+        const options: LaunchOption[] = [];
+        const hasAwsLaunch = !!(booking.awsProvisioning?.launchUrl || booking.provisionedUrl);
+        const hasLocalLaunch = !!booking.localProvisioning?.ipAddress;
+
+        // For Admin, Facilitator, and Lab Technician, always show both AWS and Local
+        if (user?.role === 'admin' || user?.role === 'facilitator' || user?.role === 'lab technician') {
+            options.push({ kind: 'aws', label: 'Launch AWS Lab' });
+            options.push({ kind: 'local', label: 'Launch Local Lab' });
+            return options;
+        }
+
+        if (booking.provisioningType === 'aws' || hasAwsLaunch) {
+            options.push({ kind: 'aws', label: 'Launch AWS Lab' });
+        }
+
+        if (booking.provisioningType === 'local' || hasLocalLaunch) {
+            options.push({ kind: 'local', label: 'Launch Local Lab' });
+        }
+
+        return options.length > 0 ? options : [{ kind: 'aws', label: 'Launch AWS Lab' }];
+    };
+
+    const handleLaunchBooking = (booking: Booking, optionKind?: 'aws' | 'local') => {
+        const launchKind = optionKind || getLaunchOptions(booking)[0]?.kind;
+
+        if (launchKind === 'aws') {
             window.open(booking.awsProvisioning?.launchUrl || booking.provisionedUrl || AWS_LAUNCH_URL, '_blank');
             return;
         }
 
-        if (booking.provisioningType === 'local') {
+        if (launchKind === 'local') {
+            // If it's a privileged role and we have a proxmoxUrl, go there
+            if ((user?.role === 'admin' || user?.role === 'facilitator' || user?.role === 'lab technician') && proxmoxUrl) {
+                window.open(proxmoxUrl, '_blank');
+                return;
+            }
             navigate(`/bookings/${booking._id}/terminal`);
             return;
         }
@@ -439,6 +530,16 @@ const Dashboard: React.FC = () => {
             </header>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Welcome Message */}
+                <div className="mb-8">
+                    <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                        Welcome back, <span className="text-primary">{user?.name || 'Student'}</span>
+                    </h1>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+                        {user?.role === 'student' ? 'Access your virtual laboratory environments and track your progress.' : 'Manage laboratory resources and review student submissions.'}
+                    </p>
+                </div>
+
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
@@ -561,15 +662,20 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredLabs.map((lab) => {
-                                const hasProvisionedBooking = bookings.some(b =>
+                                const hasAnyRelevantBooking = bookings.some(b =>
                                     b.lab._id === lab._id &&
-                                    isBookingProvisioned(b)
+                                    (b.approvalStatus === 'approved' || b.approvalStatus === 'pending') &&
+                                    b.status !== 'cancelled' &&
+                                    b.status !== 'completed'
                                 );
-                                
-                                const isFacilitatorInProgramme = (user?.role === 'facilitator' || user?.role === 'lab technician') && 
+
+                                const isStudentInProgramme = user?.role === 'student' &&
                                     user.programmes?.some(p => getProgrammeType(p) === lab.type);
 
-                                const canLaunch = user?.role === 'admin' || isFacilitatorInProgramme || hasProvisionedBooking;
+                                const isFacilitatorInProgramme = (user?.role === 'facilitator' || user?.role === 'lab technician') &&
+                                    user.programmes?.some(p => getProgrammeType(p) === lab.type);
+
+                                const canLaunch = user?.role === 'admin' || isFacilitatorInProgramme || isStudentInProgramme || hasAnyRelevantBooking;
 
                                 return (
                                     <div
@@ -591,22 +697,92 @@ const Dashboard: React.FC = () => {
                                         <div className="mt-auto">
                                             {canLaunch ? (
                                                 (() => {
-                                                    const relevantBooking = bookings.find(b => 
+                                                    const labBookings = bookings.filter(b => 
                                                         b.lab._id === lab._id && 
-                                                        (b.approvalStatus === 'approved' || b.approvalStatus === 'pending') &&
-                                                        b.status !== 'cancelled'
+                                                        b.status !== 'cancelled' &&
+                                                        b.status !== 'completed'
                                                     );
+                                                    
+                                                    // Sort by readiness: provisioned > approved > pending
+                                                    const relevantBooking = labBookings.sort((a, b) => {
+                                                        const score = (bk: Booking) => {
+                                                            if (isBookingProvisioned(bk)) return 3;
+                                                            if (bk.approvalStatus === 'approved') return 2;
+                                                            if (bk.approvalStatus === 'pending') return 1;
+                                                            return 0;
+                                                        };
+                                                        return score(b) - score(a);
+                                                    })[0];
 
-                                                    if (user?.role === 'admin' || isFacilitatorInProgramme || (relevantBooking && isBookingProvisioned(relevantBooking))) {
+                                                    if (user?.role === 'admin' || isFacilitatorInProgramme || isStudentInProgramme || (relevantBooking && isBookingProvisioned(relevantBooking))) {
+                                                        const launchOptions = relevantBooking ? getLaunchOptions(relevantBooking) : [];
+                                                        const isPrivileged = user?.role === 'admin' || isFacilitatorInProgramme;
+
                                                         return (
                                                             <div className="flex flex-col gap-3">
-                                                                <button
-                                                                    onClick={() => relevantBooking ? handleLaunchBooking(relevantBooking) : window.open(AWS_LAUNCH_URL, '_blank')}
-                                                                    className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
-                                                                >
-                                                                    <Play className="w-4 h-4 fill-current" />
-                                                                    Launch Lab
-                                                                </button>
+                                                                {(isPrivileged || isStudentInProgramme) ? (
+                                                                    /* Direct/Privileged Dropdown */
+                                                                    <div className="relative launch-dropdown-container">
+                                                                        <button
+                                                                            onClick={() => setOpenLaunchMenuId(openLaunchMenuId === lab._id ? null : lab._id)}
+                                                                            className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
+                                                                        >
+                                                                            <Play className="w-4 h-4 fill-current" />
+                                                                            Launch Lab
+                                                                            <ChevronDown className={`w-4 h-4 transition-transform ${openLaunchMenuId === lab._id ? 'rotate-180' : ''}`} />
+                                                                        </button>
+
+                                                                        {openLaunchMenuId === lab._id && (
+                                                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden py-1">
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        if (relevantBooking && (relevantBooking.awsProvisioning?.launchUrl || relevantBooking.provisionedUrl)) {
+                                                                                            handleLaunchBooking(relevantBooking, 'aws');
+                                                                                        } else {
+                                                                                            window.open(AWS_LAUNCH_URL, '_blank');
+                                                                                        }
+                                                                                        setOpenLaunchMenuId(null);
+                                                                                    }}
+                                                                                    className="w-full px-6 py-4 text-left hover:bg-slate-50 text-slate-700 text-[10px] font-black uppercase tracking-widest transition flex items-center gap-3"
+                                                                                >
+                                                                                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                                                                                    Launch AWS Lab
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        if (relevantBooking && relevantBooking.localProvisioning?.ipAddress) {
+                                                                                            handleLaunchBooking(relevantBooking, 'local');
+                                                                                        } else if (proxmoxUrl && isPrivileged) {
+                                                                                            window.open(proxmoxUrl, '_blank');
+                                                                                        } else {
+                                                                                            navigate(`/lab/${lab._id}`);
+                                                                                        }
+                                                                                        setOpenLaunchMenuId(null);
+                                                                                    }}
+                                                                                    className="w-full px-6 py-4 text-left hover:bg-slate-50 text-slate-700 text-[10px] font-black uppercase tracking-widest transition flex items-center gap-3 border-t border-slate-50"
+                                                                                >
+                                                                                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                                                                    Launch Local Lab
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    /* Fallback Launch (must have provisioned booking) */
+                                                                    <div className={`grid gap-2 ${launchOptions.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                                                                        {launchOptions.map((option) => (
+                                                                            <button
+                                                                                key={option.kind}
+                                                                                onClick={() => handleLaunchBooking(relevantBooking!, option.kind)}
+                                                                                className="w-full px-6 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-sm font-black transition text-center flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
+                                                                            >
+                                                                                <Play className="w-4 h-4 fill-current" />
+                                                                                {option.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
                                                                 <div className="grid grid-cols-2 gap-2">
                                                                     {user?.role === 'student' && (
                                                                         <button
@@ -616,7 +792,7 @@ const Dashboard: React.FC = () => {
                                                                             }}
                                                                             className="px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-[10px] font-black transition text-center border border-slate-200 uppercase tracking-widest"
                                                                         >
-                                                                            Booking
+                                                                            Booking (Project/Seminar)
                                                                         </button>
                                                                     )}
                                                                     {hasPerm('submit_assignments') && (
@@ -624,7 +800,7 @@ const Dashboard: React.FC = () => {
                                                                             onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
                                                                             className="px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-[10px] font-black transition text-center border border-slate-200 uppercase tracking-widest"
                                                                         >
-                                                                            Submit Task
+                                                                            {user?.role === 'facilitator' || user?.role === 'lab technician' ? 'Post Lab Activities' : 'Submit Task'}
                                                                         </button>
                                                                     )}
                                                                 </div>
@@ -640,16 +816,34 @@ const Dashboard: React.FC = () => {
                                                                     </div>
                                                                     <span className="text-[10px] opacity-70">Waiting for Admin Approval</span>
                                                                 </div>
+                                                                {hasPerm('submit_assignments') && (
+                                                                    <button
+                                                                        onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
+                                                                        className="w-full px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-[10px] font-black transition text-center border border-slate-200 uppercase tracking-widest"
+                                                                    >
+                                                                        Submit Task
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         );
                                                     } else if (relevantBooking && relevantBooking.approvalStatus === 'approved') {
                                                         return (
-                                                            <div className="w-full px-6 py-4 bg-sky-50 border border-sky-200 text-sky-700 rounded-2xl text-[10px] font-black text-center flex flex-col gap-1 shadow-sm uppercase tracking-widest">
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                                    Awaiting Provisioning
+                                                            <div className="flex flex-col gap-3">
+                                                                <div className="w-full px-6 py-4 bg-sky-50 border border-sky-200 text-sky-700 rounded-2xl text-[10px] font-black text-center flex flex-col gap-1 shadow-sm uppercase tracking-widest">
+                                                                    <div className="flex items-center justify-center gap-2">
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                        Awaiting Provisioning
+                                                                    </div>
+                                                                    <span className="text-[10px] opacity-70">Technician approval complete. Provisioning pending.</span>
                                                                 </div>
-                                                                <span className="text-[10px] opacity-70">Technician approval complete. Provisioning pending.</span>
+                                                                {hasPerm('submit_assignments') && (
+                                                                    <button
+                                                                        onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
+                                                                        className="w-full px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-[10px] font-black transition text-center border border-slate-200 uppercase tracking-widest"
+                                                                    >
+                                                                        Submit Task
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         );
                                                     } else if (hasPerm('view_labs')) {
@@ -752,12 +946,61 @@ const Dashboard: React.FC = () => {
                                                     <td className="px-8 py-5 text-sm">
                                                         <div className="flex flex-wrap items-center gap-3">
                                                             {isBookingProvisioned(booking) && (
+                                                                (() => {
+                                                                    const launchOptions = getLaunchOptions(booking);
+                                                                    const isPrivileged = user?.role === 'admin' || user?.role === 'facilitator' || user?.role === 'lab technician';
+                                                                    
+                                                                    if (isPrivileged && launchOptions.length > 1) {
+                                                                        return (
+                                                                            <div className="relative launch-dropdown-container">
+                                                                                <button
+                                                                                    onClick={() => setOpenLaunchMenuId(openLaunchMenuId === booking._id ? null : booking._id)}
+                                                                                    className="text-primary hover:text-primary/80 font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-colors"
+                                                                                >
+                                                                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                                                                    Launch
+                                                                                    <ChevronDown className={`w-3 h-3 transition-transform ${openLaunchMenuId === booking._id ? 'rotate-180' : ''}`} />
+                                                                                </button>
+                                                                                {openLaunchMenuId === booking._id && (
+                                                                                    <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                                                                                        {launchOptions.map((option) => (
+                                                                                            <button
+                                                                                                key={option.kind}
+                                                                                                onClick={() => {
+                                                                                                    handleLaunchBooking(booking, option.kind);
+                                                                                                    setOpenLaunchMenuId(null);
+                                                                                                }}
+                                                                                                className="w-full px-4 py-2.5 hover:bg-slate-50 text-slate-900 text-[10px] font-black transition text-left flex items-center gap-2 uppercase tracking-widest border-b border-slate-100 last:border-0"
+                                                                                            >
+                                                                                                <Play className="w-3 h-3 text-primary fill-current" />
+                                                                                                {option.label}
+                                                                                            </button>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    
+                                                                    return launchOptions.map((option) => (
+                                                                        <button
+                                                                            key={`${booking._id}-${option.kind}`}
+                                                                            onClick={() => handleLaunchBooking(booking, option.kind)}
+                                                                            className="text-primary hover:text-primary/80 font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-colors"
+                                                                        >
+                                                                            <Play className="w-3.5 h-3.5 fill-current" />
+                                                                            {option.label}
+                                                                        </button>
+                                                                    ));
+                                                                })()
+                                                            )}
+                                                            {hasPerm('submit_assignments') && (booking.approvalStatus === 'approved' || booking.provisioningStatus === 'provisioned') && (
                                                                 <button
-                                                                    onClick={() => handleLaunchBooking(booking)}
+                                                                    onClick={() => window.open(NOUN_ELEARN_URL, '_blank')}
                                                                     className="text-primary hover:text-primary/80 font-black uppercase tracking-widest text-[10px] flex items-center gap-1.5 transition-colors"
                                                                 >
-                                                                    <Play className="w-3.5 h-3.5 fill-current" />
-                                                                    Launch
+                                                                    <FileCheck className="w-3.5 h-3.5" />
+                                                                    {user?.role === 'facilitator' || user?.role === 'lab technician' ? 'Post Lab Activities' : 'Submit'}
                                                                 </button>
                                                             )}
                                                             {isBookingProvisioned(booking) && booking.extensionStatus !== 'requested' && (

@@ -1,7 +1,10 @@
 import Session, { ISession, SessionState } from '../models/Session.model';
+import Lab from '../models/Lab.model';
+import Booking from '../models/Booking.model';
 import dockerService from './docker.service';
 import guacamoleService from './guacamole.service';
 import resourceManagerService from './resource-manager.service';
+import localProvisioningQueueService from './local-provisioning-queue.service';
 
 class SessionService {
     /**
@@ -11,7 +14,7 @@ class SessionService {
         userId: string,
         labId: string,
         labType: 'AI' | 'Cybersecurity' | 'MIS',
-        metadata?: { ipAddress?: string; userAgent?: string }
+        metadata?: { ipAddress?: string; userAgent?: string; bookingId?: string }
     ): Promise<ISession> {
         // Check if user already has an active session for this lab
         const existingSession = await this.getActiveSession(userId);
@@ -19,8 +22,17 @@ class SessionService {
             throw new Error('You already have an active session. Please end it before starting a new one.');
         }
 
-        // Check capacity
-        const capacity = await resourceManagerService.checkAvailableCapacity(labType);
+        // Get lab details to check provisioning type
+        const lab = await Lab.findById(labId);
+        if (!lab) {
+            throw new Error('Lab not found');
+        }
+
+        // Check capacity for Docker labs
+        let capacity = { available: true, queueLength: 0 };
+        if (lab.provisioningType === 'docker') {
+            capacity = await resourceManagerService.checkAvailableCapacity(labType);
+        }
 
         const session = new Session({
             userId,
@@ -34,12 +46,106 @@ class SessionService {
 
         await session.save();
 
-        // If capacity available, start container immediately
+        // Handle provisioning based on lab type
         if (capacity.available) {
-            await this.startContainer(session, labType);
+            if (lab.provisioningType === 'proxmox') {
+                await this.ensureVmReady(session, lab, metadata?.bookingId);
+            } else {
+                await this.startContainer(session, labType);
+            }
         }
 
         return session;
+    }
+
+    /**
+     * Ensure a Proxmox VM is ready and connected to Guacamole
+     */
+    private async ensureVmReady(session: ISession, lab: any, bookingId?: string): Promise<void> {
+        try {
+            session.state = 'starting';
+            await session.save();
+
+            // Find the booking
+            const booking = bookingId 
+                ? await Booking.findById(bookingId)
+                : await Booking.findOne({
+                    user: session.userId,
+                    lab: session.labId,
+                    approvalStatus: 'approved',
+                    startTime: { $lte: new Date() },
+                    endTime: { $gt: new Date() }
+                }).sort({ createdAt: -1 });
+
+            if (!booking) {
+                throw new Error('No active approved booking found for this lab.');
+            }
+
+            // Automate VM allocation if not yet provisioned
+            if (booking.provisioningStatus !== 'provisioned') {
+                // Check if we have a template to clone from
+                const templateId = booking.localProvisioning?.templateName || lab.templateId;
+                
+                if (templateId) {
+                    console.log(`[SessionService] Automatically triggering provisioning for booking ${booking._id} using template ${templateId}`);
+                    
+                    // Update booking with template if missing
+                    if (!booking.localProvisioning?.templateName) {
+                        booking.localProvisioning = {
+                            ...(booking.localProvisioning as any || {}),
+                            templateName: templateId
+                        } as any;
+                        booking.provisioningType = 'local';
+                        booking.provisioningStatus = 'pending';
+                        await booking.save();
+                    }
+
+                    await localProvisioningQueueService.enqueue(booking._id.toString());
+                    
+                    // Keep session in 'starting' state. The client will poll until the booking is provisioned.
+                    // We need a way to transition the session once the booking is ready.
+                    // For now, we'll let the user retry or we could add a background watcher.
+                    return;
+                } else {
+                    throw new Error('Lab is not yet provisioned and no template is configured for auto-allocation.');
+                }
+            }
+
+            // VM is provisioned, connect to Guacamole
+            const localConfig = booking.localProvisioning as any;
+            if (!localConfig?.ipAddress) {
+                throw new Error('VM is provisioned but IP address is not yet detected.');
+            }
+
+            // Create Guacamole connection to the VM
+            const guacConnection = await guacamoleService.createConnection({
+                name: `vm-${booking.localProvisioning?.vmId || session._id}`,
+                protocol: 'vnc', // Assuming VNC for graphical labs
+                hostname: localConfig.ipAddress,
+                port: '5901', // Default VNC port for our templates
+                password: lab.vncPassword || localConfig.password || '',
+            }, session.userId.toString());
+
+            // Update session
+            session.containerName = `vm-${localConfig.vmId}`;
+            session.guacamoleConnectionId = guacConnection.connectionId;
+            session.guacamoleToken = guacConnection.token;
+            session.state = 'active';
+            session.startedAt = new Date();
+            session.lastActivityAt = new Date();
+            await session.save();
+
+            // Log audit event
+            const auditLogService = (await import('./audit-log.service')).default;
+            await auditLogService.logLabStart(session.userId.toString(), session.labType);
+
+        } catch (error: any) {
+            console.error('Failed to ensure VM ready:', error);
+            session.state = 'error';
+            // Store error in metadata for UI
+            session.metadata = { ...session.metadata, error: error.message };
+            await session.save();
+        }
     }
 
     /**
@@ -63,7 +169,7 @@ class SessionService {
             });
 
             // Create Guacamole connection
-            const guacConnection = await guacamoleService.createConnection(
+            const guacConnection = await guacamoleService.createLegacyConnection(
                 containerInfo.containerName,
                 containerInfo.ipAddress,
                 session.userId.toString()

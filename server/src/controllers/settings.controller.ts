@@ -40,6 +40,7 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
         const s3 = await configService.get('s3');
         const templates = await configService.get('notification_templates');
         const proxmox = await configService.get('proxmox');
+        const proxmoxStatus = await configService.get('proxmox_status');
 
         res.json({
             general: general || { 
@@ -61,7 +62,8 @@ export const getSettings = async (req: AuthRequest, res: Response) => {
                     privateKey: (proxmox as any).vpn?.privateKey ? '***' : '',
                     presharedKey: (proxmox as any).vpn?.presharedKey ? '***' : ''
                 }
-            } : null
+            } : null,
+            proxmox_status: proxmoxStatus || { status: 'unknown' }
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching settings', error: error.message });
@@ -140,5 +142,47 @@ export const testS3 = async (req: AuthRequest, res: Response) => {
         res.json({ message: 'S3 configuration appears valid. Upload a test file to fully verify.' });
     } catch (error: any) {
         res.status(500).json({ message: 'S3 connection test failed', error: error.message });
+    }
+};
+
+// Fetch Proxmox templates
+export const getProxmoxTemplates = async (req: AuthRequest, res: Response) => {
+    try {
+        const proxmoxService = (await import('../services/proxmox.service')).default;
+        const templates = await proxmoxService.getTemplates();
+        res.json(templates);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching Proxmox templates', error: error.message });
+    }
+};
+
+// Get raw proxmox config (internal use for frontend to populate dropdowns)
+export const getProxmoxConfig = async (req: AuthRequest, res: Response) => {
+    try {
+        const proxmox = await configService.get('proxmox');
+        res.json(proxmox || {});
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching Proxmox config', error: error.message });
+    }
+};
+
+// Test Proxmox connection
+export const testProxmox = async (req: AuthRequest, res: Response) => {
+    try {
+        const proxmoxService = (await import('../services/proxmox.service')).default;
+        const result = await proxmoxService.healthCheck();
+        res.json({ message: 'Proxmox connection successful', ...result });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Proxmox connection failed', error: error.message });
+    }
+};
+
+// Get cached Proxmox status
+export const getProxmoxStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const status = await configService.get('proxmox_status');
+        res.json(status || { status: 'unknown', message: 'No health check performed yet' });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching Proxmox status', error: error.message });
     }
 };

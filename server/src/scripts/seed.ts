@@ -72,7 +72,7 @@ const defaultRoles = [
         name: 'facilitator',
         description: 'Instructor access',
         isSystemRole: true,
-        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'manage_labs', 'view_submissions', 'grade_submissions', 'view_feedback']
+        permissions: ['view_dashboard', 'view_labs', 'manage_users', 'manage_labs', 'provision_labs', 'view_submissions', 'grade_submissions', 'view_feedback']
     },
     {
         name: 'lab technician',

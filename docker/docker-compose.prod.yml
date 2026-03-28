@@ -60,6 +60,7 @@ services:
       - guacamole-db
     networks:
       - internal-network
+      - proxy-network
 
   # Backend Server
   server:
@@ -75,6 +76,8 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017/virtuallab
       - REDIS_HOST=redis
       - NODE_ENV=production
+      - PROXMOX_API_TIMEOUT_MS=60000
+      - PROXMOX_ALLOW_INSECURE_TLS=true
       - JWT_SECRET=${JWT_SECRET}
       - GUACAMOLE_URL=http://guacamole:8080/guacamole/
     volumes:

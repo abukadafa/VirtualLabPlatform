@@ -37,7 +37,7 @@ const RoleSchema = new Schema<IRoleDocument>(
         },
         color: {
             type: String,
-            default: 'from-blue-600 to-indigo-600',
+            default: 'from-emerald-600 to-green-600',
         }
     },
     {

@@ -148,7 +148,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
         <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Upload className="w-5 h-5 text-blue-400" />
+                    <Upload className="w-5 h-5 text-primary/60" />
                     Submit Lab Task
                 </h3>
                 {assignmentId && (
@@ -191,7 +191,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${attempt.gradingStatus === 'graded' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${attempt.gradingStatus === 'graded' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-primary/80/10 text-primary/60 border border-primary/80/20'
                                         }`}>
                                         {attempt.gradingStatus === 'graded' ? `Graded: ${attempt.grade}%` : 'Pending'}
                                     </span>
@@ -215,7 +215,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                                         value={title}
                                         onChange={e => setTitle(e.target.value)}
                                         placeholder="e.g. Lab 1 Completion Screenshot"
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-primary/80 outline-none"
                                     />
                                 </div>
                                 <div>
@@ -225,7 +225,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                                         value={description}
                                         onChange={e => setDescription(e.target.value)}
                                         placeholder="Briefly describe what you are submitting..."
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-primary/80 outline-none resize-none"
                                     />
                                 </div>
                             </div>
@@ -237,11 +237,11 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                                     disabled={uploading}
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
                                 />
-                                <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-all ${file ? 'border-blue-500/50 bg-blue-500/5' : 'border-slate-700 group-hover:border-slate-600 bg-slate-900/30 group-hover:bg-slate-900/50'
+                                <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-all ${file ? 'border-primary/80/50 bg-primary/80/5' : 'border-slate-700 group-hover:border-slate-600 bg-slate-900/30 group-hover:bg-slate-900/50'
                                     }`}>
                                     {file ? (
                                         <>
-                                            <File className="w-8 h-8 text-blue-400 mb-2" />
+                                            <File className="w-8 h-8 text-primary/60 mb-2" />
                                             <p className="text-sm font-medium text-white">{file.name}</p>
                                             <p className="text-xs text-slate-400 mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                                         </>
@@ -259,11 +259,11 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-xs font-medium">
                                         <span className="text-slate-400">Uploading to cloud storage...</span>
-                                        <span className="text-blue-400">{progress}%</span>
+                                        <span className="text-primary/60">{progress}%</span>
                                     </div>
                                     <div className="w-full bg-slate-700 rounded-full h-1.5 overflow-hidden">
                                         <div
-                                            className="bg-blue-500 h-full transition-all duration-300"
+                                            className="bg-primary/80 h-full transition-all duration-300"
                                             style={{ width: `${progress}%` }}
                                         />
                                     </div>
@@ -280,7 +280,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                             <button
                                 onClick={handleUpload}
                                 disabled={!file || uploading || !title.trim()}
-                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                className="w-full bg-primary hover:bg-primary/80 disabled:opacity-50 disabled:hover:bg-primary text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                             >
                                 {uploading ? (
                                     <>
@@ -304,7 +304,7 @@ const AssignmentUpload: React.FC<AssignmentUploadProps> = ({ assignmentId, labId
                             </p>
                             <button
                                 onClick={() => setSuccess(false)}
-                                className="mt-6 text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                                className="mt-6 text-sm text-primary/60 hover:text-emerald-400 font-medium transition-colors"
                             >
                                 Submit Another Task
                             </button>

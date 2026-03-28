@@ -6,6 +6,16 @@ export interface GuacamoleConnection {
     token: string;
 }
 
+export interface ConnectionParams {
+    name: string;
+    protocol: 'vnc' | 'ssh' | 'rdp';
+    hostname: string;
+    port: string;
+    username?: string;
+    password?: string;
+    extraParameters?: Record<string, string>;
+}
+
 class GuacamoleService {
     private client: AxiosInstance;
     private adminToken: string | null = null;
@@ -56,39 +66,45 @@ class GuacamoleService {
     }
 
     /**
-     * Create a VNC connection to a container
+     * Create a Guacamole connection
      */
     async createConnection(
-        containerName: string,
-        containerIp: string,
+        params: ConnectionParams,
         userId: string
     ): Promise<GuacamoleConnection> {
         const adminToken = await this.getAdminToken();
 
         try {
+            // Default parameters for the connection
+            const parameters: Record<string, string> = {
+                hostname: params.hostname,
+                port: params.port,
+                username: params.username || '',
+                password: params.password || '',
+                'enable-audio': 'false',
+                'enable-printing': 'false',
+                'enable-drive': 'false',
+                'create-drive-path': 'false',
+                'disable-copy': 'false',
+                'disable-paste': 'false',
+                'color-depth': '24',
+                'cursor': 'remote',
+                'swap-red-blue': 'false',
+                ...params.extraParameters,
+            };
+
+            // Protocol specific defaults
+            if (params.protocol === 'vnc') {
+                parameters['dest-host'] = params.hostname;
+                parameters['dest-port'] = params.port;
+            }
+
             // Create connection definition
             const connectionData = {
                 parentIdentifier: 'ROOT',
-                name: `${containerName}-${userId}`,
-                protocol: 'vnc',
-                parameters: {
-                    hostname: containerIp,
-                    port: '5901',
-                    password: '', // No VNC password (container-level security)
-                    'enable-audio': 'false',
-                    'enable-printing': 'false',
-                    'enable-drive': 'false',
-                    'create-drive-path': 'false',
-                    'disable-copy': 'false',
-                    'disable-paste': 'false',
-                    'color-depth': '24',
-                    'cursor': 'remote',
-                    'swap-red-blue': 'false',
-                    'dest-host': containerIp,
-                    'dest-port': '5901',
-                    'recording-path': '',
-                    'recording-name': '',
-                },
+                name: `${params.name}-${userId}`,
+                protocol: params.protocol,
+                parameters,
                 attributes: {
                     'max-connections': '1',
                     'max-connections-per-user': '1',
@@ -118,6 +134,23 @@ class GuacamoleService {
             console.error('Failed to create Guacamole connection:', error.response?.data || error.message);
             throw new Error('Failed to create Guacamole connection');
         }
+    }
+
+    /**
+     * Legacy wrapper for createConnection (backwards compatibility)
+     */
+    async createLegacyConnection(
+        containerName: string,
+        containerIp: string,
+        userId: string
+    ): Promise<GuacamoleConnection> {
+        return this.createConnection({
+            name: containerName,
+            protocol: 'vnc',
+            hostname: containerIp,
+            port: '5901',
+            password: '',
+        }, userId);
     }
 
     /**

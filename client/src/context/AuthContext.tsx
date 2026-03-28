@@ -15,6 +15,7 @@ interface User {
 interface Branding {
     appName: string;
     logoUrl: string;
+    secondaryLogoUrl?: string;
     faviconUrl: string;
     primaryColor: string;
     secondaryColor: string;
@@ -60,6 +61,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? 
+            `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : 
+            null;
+    };
+
     const applyBranding = (data: Branding) => {
         if (!data) return;
         
@@ -92,9 +100,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const root = document.documentElement;
         if (data.primaryColor) {
             root.style.setProperty('--primary-color', data.primaryColor);
+            const rgb = hexToRgb(data.primaryColor);
+            if (rgb) root.style.setProperty('--primary-rgb', rgb);
         }
         if (data.secondaryColor) {
             root.style.setProperty('--secondary-color', data.secondaryColor);
+            const rgb = hexToRgb(data.secondaryColor);
+            if (rgb) root.style.setProperty('--secondary-rgb', rgb);
         }
     };
 
@@ -151,8 +163,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Login failed');
+            let errorMessage = 'Login failed';
+            try {
+                const text = await response.text();
+                try {
+                    const error = JSON.parse(text);
+                    errorMessage = error.message || errorMessage;
+                } catch (e) {
+                    errorMessage = text || errorMessage;
+                }
+            } catch (e) {
+                // Ignore
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -174,8 +197,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Registration failed');
+            let errorMessage = 'Registration failed';
+            try {
+                const text = await response.text();
+                try {
+                    const error = JSON.parse(text);
+                    errorMessage = error.message || errorMessage;
+                } catch (e) {
+                    errorMessage = text || errorMessage;
+                }
+            } catch (e) {
+                // Ignore
+            }
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();

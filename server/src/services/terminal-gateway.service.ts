@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { Client as SSHClient } from 'ssh2';
 import Booking from '../models/Booking.model';
+import configService from './config.service';
 
 interface DecodedToken {
     id: string;
@@ -11,6 +12,11 @@ interface DecodedToken {
 
 class TerminalGatewayService {
     private wss?: WebSocketServer;
+
+    private rejectUpgrade(socket: any, status: string, message: string) {
+        socket.write(`HTTP/1.1 ${status}\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(message)}\r\n\r\n${message}`);
+        socket.destroy();
+    }
 
     initialize(server: http.Server) {
         this.wss = new WebSocketServer({ noServer: true });
@@ -26,8 +32,7 @@ class TerminalGatewayService {
                 const bookingId = url.searchParams.get('bookingId');
 
                 if (!token || !bookingId || !process.env.JWT_SECRET) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
+                    this.rejectUpgrade(socket, '401 Unauthorized', 'Missing terminal authentication details.');
                     return;
                 }
 
@@ -35,21 +40,25 @@ class TerminalGatewayService {
                 const booking = await Booking.findById(bookingId);
 
                 if (!booking) {
-                    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-                    socket.destroy();
+                    this.rejectUpgrade(socket, '404 Not Found', 'Booking not found.');
                     return;
                 }
 
+                const isStaff = ['admin', 'facilitator', 'lab technician'].includes(decoded.role);
                 const ownsBooking = booking.user.toString() === decoded.id;
-                if (!ownsBooking && decoded.role !== 'admin') {
-                    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-                    socket.destroy();
+                
+                if (!ownsBooking && !isStaff) {
+                    this.rejectUpgrade(socket, '403 Forbidden', 'You do not have access to this booking.');
+                    return;
+                }
+
+                if (booking.provisioningStatus === 'deleted' || booking.provisioningStatus === 'expired' || booking.status === 'completed') {
+                    this.rejectUpgrade(socket, '410 Gone', 'This lab booking has expired or has already been cleaned up.');
                     return;
                 }
 
                 if (booking.approvalStatus !== 'approved' || booking.provisioningStatus !== 'provisioned' || booking.provisioningType !== 'local') {
-                    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-                    socket.destroy();
+                    this.rejectUpgrade(socket, '400 Bad Request', 'This booking is not currently provisioned for local terminal access.');
                     return;
                 }
 
@@ -58,15 +67,33 @@ class TerminalGatewayService {
                     this.wss?.emit('connection', ws, request);
                 });
             } catch (error) {
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
+                this.rejectUpgrade(socket, '401 Unauthorized', 'Terminal authentication failed.');
             }
         });
 
         this.wss.on('connection', async (ws) => {
-            const booking = await Booking.findById((ws as any).bookingId);
+            const bookingId = (ws as any).bookingId;
+            const booking = await Booking.findById(bookingId);
+            
             if (!booking?.localProvisioning?.ipAddress || !booking.localProvisioning.username || !booking.localProvisioning.password) {
+                console.error(`[Terminal] Incomplete connection details for booking ${bookingId}`);
                 ws.send(JSON.stringify({ type: 'error', message: 'Local VM connection details are incomplete.' }));
+                ws.close();
+                return;
+            }
+
+            const targetIp = booking.localProvisioning.ipAddress;
+            const targetUser = booking.localProvisioning.username;
+            console.log(`[Terminal] Connecting to ${targetUser}@${targetIp} for booking ${bookingId}`);
+
+            const proxmoxConfig = await configService.get<any>('proxmox');
+            const proxmoxHost = proxmoxConfig?.apiUrl ? new URL(proxmoxConfig.apiUrl).hostname : '';
+            if (targetIp === proxmoxHost) {
+                console.warn(`[Terminal] Security Block: Attempt to connect to Proxmox host ${targetIp}`);
+                ws.send(JSON.stringify({
+                    type: 'error',
+                    message: 'Terminal target is set to the Proxmox host IP, not the VM guest IP. Update the booking with the VM SSH IP.'
+                }));
                 ws.close();
                 return;
             }
@@ -75,8 +102,10 @@ class TerminalGatewayService {
             let shellStream: any;
 
             ssh.on('ready', () => {
+                console.log(`[Terminal] SSH Handshake successful for ${targetIp}`);
                 ssh.shell((err, stream) => {
                     if (err) {
+                        console.error(`[Terminal] Shell request failed: ${err.message}`);
                         ws.send(JSON.stringify({ type: 'error', message: err.message }));
                         ws.close();
                         ssh.end();
@@ -95,6 +124,7 @@ class TerminalGatewayService {
                     });
 
                     stream.on('close', () => {
+                        console.log(`[Terminal] Shell stream closed for ${targetIp}`);
                         ws.close();
                         ssh.end();
                     });
@@ -102,7 +132,13 @@ class TerminalGatewayService {
             });
 
             ssh.on('error', (error) => {
+                console.error(`[Terminal] SSH Error for ${targetIp}: ${error.message}`);
                 ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                ws.close();
+            });
+
+            ssh.on('close', () => {
+                console.log(`[Terminal] SSH Connection closed for ${targetIp}`);
             });
 
             ws.on('message', (raw) => {

@@ -44,7 +44,7 @@ class LocalProvisioningQueueService {
 
     async enqueue(bookingId: string): Promise<void> {
         if (this.ready && this.queue) {
-            await this.queue.add('provision-local-vm', { bookingId }, { removeOnComplete: true, removeOnFail: false });
+            await this.queue.add('provision-local-vm', { bookingId }, { removeOnComplete: true, removeOnFail: true });
             return;
         }
 
@@ -62,16 +62,32 @@ class LocalProvisioningQueueService {
         }
 
         const localConfig = booking.localProvisioning as any || {};
-        if (!localConfig.templateName || !localConfig.vmId) {
-            booking.provisioningStatus = 'failed';
-            booking.adminNote = 'Provisioning failed: template name and VM ID are required.';
-            await booking.save();
-            throw new Error('Local provisioning is missing templateName or vmId');
+        const templateId = String(localConfig.templateName || '').trim();
+        
+        if (!templateId || templateId === '' || templateId === 'null') {
+            console.log(`[LocalProvisioningQueue] Skipping booking ${bookingId} - no valid templateName provided (manual mode or empty).`);
+            // If it's manual, we don't mark it failed.
+            return;
         }
 
         try {
+            // Update templateName to the sanitized ID just in case
+            booking.localProvisioning = {
+                ...(booking.localProvisioning as any || {}),
+                templateName: templateId
+            } as any;
+
+            if (!localConfig.vmId) {
+                localConfig.vmId = await proxmoxService.getNextAvailableVmId();
+                booking.localProvisioning = {
+                    ...(booking.localProvisioning as any || {}),
+                    vmId: localConfig.vmId,
+                } as any;
+                await booking.save();
+            }
+
             await proxmoxService.provisionVm({
-                templateName: localConfig.templateName,
+                templateName: templateId,
                 vmId: localConfig.vmId,
                 nodeName: localConfig.nodeName,
                 cpuCores: localConfig.cpuCores,
@@ -81,10 +97,29 @@ class LocalProvisioningQueueService {
                 password: localConfig.password,
             });
 
+            await proxmoxService.waitForVmReady(localConfig.vmId, localConfig.nodeName);
+            await proxmoxService.startVm(localConfig.vmId, localConfig.nodeName);
+            await proxmoxService.waitForVmRunning(localConfig.vmId, localConfig.nodeName);
+
+            const originalIp = localConfig.ipAddress;
+            const guestIp = await proxmoxService.waitForGuestIp(localConfig.vmId, localConfig.nodeName);
+            if (guestIp) {
+                booking.localProvisioning = {
+                    ...(booking.localProvisioning as any || {}),
+                    ipAddress: guestIp,
+                } as any;
+            }
+
             booking.provisioningStatus = 'provisioned';
             booking.status = 'granted';
             booking.provisionedAt = new Date();
-            booking.adminNote = booking.adminNote || 'Local VM provisioned successfully.';
+            if (guestIp) {
+                booking.adminNote = booking.adminNote || `Local VM provisioned successfully, booted, and guest IP detected as ${guestIp}.`;
+            } else if (originalIp) {
+                booking.adminNote = booking.adminNote || `Local VM provisioned successfully and booted. Guest IP was not auto-detected; using configured SSH target ${originalIp}.`;
+            } else {
+                booking.adminNote = booking.adminNote || 'Local VM provisioned successfully and booted. Guest IP was not auto-detected; update the booking with the VM SSH IP before terminal use.';
+            }
             await booking.save();
         } catch (error: any) {
             booking.provisioningStatus = 'failed';

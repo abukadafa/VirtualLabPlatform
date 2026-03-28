@@ -55,7 +55,7 @@ export const getLabById = async (req: AuthRequest, res: Response) => {
 // Create lab (Admin only)
 export const createLab = async (req: AuthRequest, res: Response) => {
     try {
-        const { name, type, description, software, capacity } = req.body;
+        const { name, type, description, software, capacity, provisioningType, templateId, vncPassword } = req.body;
 
         const lab = new Lab({
             name,
@@ -63,6 +63,9 @@ export const createLab = async (req: AuthRequest, res: Response) => {
             description,
             software,
             capacity,
+            provisioningType,
+            templateId,
+            vncPassword,
         });
 
         await lab.save();
@@ -75,7 +78,30 @@ export const createLab = async (req: AuthRequest, res: Response) => {
 // Update lab (Admin only)
 export const updateLab = async (req: AuthRequest, res: Response) => {
     try {
-        const lab = await Lab.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const { 
+            name, 
+            type, 
+            description, 
+            software, 
+            capacity, 
+            provisioningType, 
+            templateId, 
+            vncPassword,
+            status 
+        } = req.body;
+
+        const updateData: any = {};
+        if (name) updateData.name = name;
+        if (type) updateData.type = type;
+        if (description !== undefined) updateData.description = description;
+        if (software) updateData.software = software;
+        if (capacity) updateData.capacity = capacity;
+        if (provisioningType) updateData.provisioningType = provisioningType;
+        if (templateId !== undefined) updateData.templateId = templateId;
+        if (vncPassword) updateData.vncPassword = vncPassword;
+        if (status) updateData.status = status;
+
+        const lab = await Lab.findByIdAndUpdate(req.params.id, updateData, { new: true });
         if (!lab) {
             return res.status(404).json({ message: 'Lab not found' });
         }
@@ -109,16 +135,24 @@ export const startLab = async (req: AuthRequest, res: Response) => {
         const userId = req.user!.id;
         const labId = req.params.id;
 
-        // Students must have an approved and provisioned booking in the active time window.
+        // Get lab details
+        const lab = await Lab.findById(labId);
+        if (!lab) {
+            return res.status(404).json({ message: 'Lab not found' });
+        }
+
+        // Students no longer strictly need a booking for regular access if they are enrolled in the programme.
+        // But we still check if they have one to associate it with the session.
         const now = new Date();
-        const booking = await Booking.findOne({
+        const bookingQuery: any = {
             user: userId,
             lab: labId,
             approvalStatus: 'approved',
-            provisioningStatus: 'provisioned',
             startTime: { $lte: now },
             endTime: { $gt: now }
-        });
+        };
+
+        const booking = await Booking.findOne(bookingQuery);
 
         const typeMapping: { [key: string]: string } = {
             'Artificial Intelligence': 'AI',
@@ -126,18 +160,15 @@ export const startLab = async (req: AuthRequest, res: Response) => {
             'Management Information System': 'MIS'
         };
 
-        // Get lab details
-        const lab = await Lab.findById(labId);
-        if (!lab) {
-            return res.status(404).json({ message: 'Lab not found' });
-        }
+        const isStudentEnrolled = req.user?.role === 'student' && 
+            (req.user?.programmes || []).some(p => typeMapping[p] === lab.type);
 
         const staffAllowedByProgramme = (req.user?.role === 'facilitator' || req.user?.role === 'lab technician') &&
             (req.user?.programmes || []).some(p => typeMapping[p] === lab.type);
 
-        if (!booking && req.user?.role !== 'admin' && !staffAllowedByProgramme) {
+        if (!booking && req.user?.role !== 'admin' && !staffAllowedByProgramme && !isStudentEnrolled) {
             return res.status(403).json({
-                message: 'Access denied. You do not have an approved and provisioned booking for this lab.'
+                message: 'Access denied. You are not enrolled in the programme for this lab.'
             });
         }
 
@@ -149,13 +180,9 @@ export const startLab = async (req: AuthRequest, res: Response) => {
             {
                 ipAddress: req.ip || '',
                 userAgent: (req.headers['user-agent'] as string) || '',
+                bookingId: booking?._id?.toString()
             }
         );
-
-        // Log audit event
-        if (session.containerId) {
-            await auditLogService.logLabStart(userId, lab.type.toString(), req);
-        }
 
         const guacamoleBaseUrl = process.env.GUACAMOLE_BASE_URL || '';
         const guacamoleUrl = `${guacamoleBaseUrl}/guacamole/#/client/${session.guacamoleConnectionId}?token=${session.guacamoleToken}`;

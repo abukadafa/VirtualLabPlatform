@@ -7,6 +7,9 @@ export interface ILab extends Document {
     software: string[];
     capacity: number;
     status: 'active' | 'maintenance' | 'inactive';
+    provisioningType: 'docker' | 'proxmox';
+    templateId?: string;
+    vncPassword?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -42,6 +45,19 @@ const LabSchema: Schema = new Schema(
             enum: ['active', 'maintenance', 'inactive'],
             default: 'active',
         },
+        provisioningType: {
+            type: String,
+            enum: ['docker', 'proxmox'],
+            default: 'docker',
+        },
+        templateId: {
+            type: String,
+            trim: true,
+        },
+        vncPassword: {
+            type: String,
+            trim: true,
+        }
     },
     {
         timestamps: true,

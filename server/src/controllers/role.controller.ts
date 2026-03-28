@@ -125,7 +125,8 @@ export const seedRoles = async (req: Request, res: Response) => {
                     'submit_feedback',
                     'manage_users',
                     'export_users',
-                    'manage_labs'
+                    'manage_labs',
+                    'provision_labs'
                 ]
             },
             {

@@ -12,7 +12,9 @@ import {
     bulkDeleteFeedback,
     getAllDeletedUsers,
     restoreUser,
-    bulkDeleteUsers
+    bulkDeleteUsers,
+    bulkNotifyUsers,
+    bulkUpdateStatus
     } from '../controllers/user.controller';
     import { authenticate, authorize, hasPermission } from '../middleware/auth.middleware';
 
@@ -26,6 +28,8 @@ import {
 
 router.get('/deleted', authenticate, hasPermission('manage_users'), getAllDeletedUsers);
 router.post('/bulk-delete', authenticate, hasPermission('manage_users'), bulkDeleteUsers);
+router.post('/bulk-notify', authenticate, hasPermission('manage_users'), bulkNotifyUsers);
+router.post('/bulk-status', authenticate, hasPermission('manage_users'), bulkUpdateStatus);
 router.post('/restore/:id', authenticate, hasPermission('manage_users'), restoreUser);
 router.post('/', authenticate, hasPermission('manage_users'), createUser);
 router.post('/bulk', authenticate, hasPermission('manage_users'), bulkCreateUsers);

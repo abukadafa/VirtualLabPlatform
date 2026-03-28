@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import RoleManagement from './RoleManagement';
-import { Save, TestTube, CheckCircle, XCircle, Palette, Mail, Cloud, FileText, Shield, Server, Network } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Palette, Mail, Cloud, FileText, Shield, Server, Network, RefreshCw } from 'lucide-react';
 import { API_URL } from '../lib/config';
 
 interface SystemSettings {
@@ -50,6 +50,8 @@ const SystemSettings: React.FC = () => {
     const [settings, setSettings] = useState<SystemSettings>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [fetchingTemplates, setFetchingTemplates] = useState(false);
+    const [proxmoxTemplates, setProxmoxTemplates] = useState<Array<{ vmid: string | number; name?: string; status?: string }>>([]);
     const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
     const isAdmin = user?.role === 'admin';
@@ -74,15 +76,53 @@ const SystemSettings: React.FC = () => {
         }
     };
 
+    const fetchProxmoxTemplates = async () => {
+        if (!isAdmin) return;
+        setFetchingTemplates(true);
+        setTestResult(null);
+        try {
+            const response = await fetch(`${API_URL}/api/settings/proxmox/templates`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (response.ok && Array.isArray(data)) {
+                const templateIds = data.map((t: any) => String(t.vmid)).join('\n');
+                const fetchedIds = new Set(data.map((t: any) => String(t.vmid)));
+
+                setProxmoxTemplates(data);
+                setSettings((prev) => {
+                    const existingDefault = (prev.proxmox?.defaultTemplate || '').trim();
+                    const nextDefault = existingDefault && fetchedIds.has(existingDefault)
+                        ? existingDefault
+                        : (data[0] ? String(data[0].vmid) : existingDefault);
+
+                    return {
+                        ...prev,
+                        proxmox: {
+                            ...(prev.proxmox || {}),
+                            allowedTemplates: templateIds,
+                            defaultTemplate: nextDefault
+                        }
+                    };
+                });
+                setTestResult({ type: 'success', message: `Successfully fetched ${data.length} templates from Proxmox.` });
+            } else {
+                const message = data?.error ? `${data.message}: ${data.error}` : data?.message;
+                setTestResult({ type: 'error', message: message || 'Failed to fetch templates. Ensure Proxmox settings are saved first.' });
+            }
+        } catch (error: any) {
+            setTestResult({ type: 'error', message: 'Connection error: ' + error.message });
+        } finally {
+            setFetchingTemplates(false);
+        }
+    };
+
     const saveSettings = async (key: string, value: any) => {
         if (!isAdmin) return;
         setSaving(true);
         setTestResult(null);
 
-        console.log('Saving settings:', { key, value });
-
         try {
-            console.log('Using API URL:', API_URL);
             const response = await fetch(`${API_URL}/api/settings`, {
                 method: 'PUT',
                 headers: {
@@ -92,17 +132,7 @@ const SystemSettings: React.FC = () => {
                 body: JSON.stringify({ key, value })
             });
 
-            let data;
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
-                data = await response.json();
-            } else {
-                const text = await response.text();
-                console.error('Non-JSON response:', text);
-                throw new Error('Server returned non-JSON response (check console)');
-            }
-
-            console.log('Save response:', { status: response.status, data });
+            const data = await response.json();
 
             if (response.ok) {
                 setTestResult({ type: 'success', message: 'Settings saved successfully!' });
@@ -114,7 +144,6 @@ const SystemSettings: React.FC = () => {
                 setTestResult({ type: 'error', message: data.message || 'Failed to save settings' });
             }
         } catch (error: any) {
-            console.error('Save error:', error);
             setTestResult({ type: 'error', message: 'Connection error: ' + error.message });
         } finally {
             setSaving(false);
@@ -144,6 +173,30 @@ const SystemSettings: React.FC = () => {
         }
     };
 
+    const testProxmox = async () => {
+        if (!isAdmin) return;
+        setTestResult(null);
+        setSaving(true);
+        try {
+            const response = await fetch(`${API_URL}/api/settings/test-proxmox`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+            setTestResult({
+                type: response.ok ? 'success' : 'error',
+                message: response.ok ? `${data.message} (Version: ${data.version})` : data.message
+            });
+        } catch (error: any) {
+            setTestResult({ type: 'error', message: 'Connection error: ' + error.message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const vpn = settings.proxmox?.vpn || {};
     const wireGuardAppConfig = `[Interface]
 Address = ${vpn.clientAddress || '10.99.0.2/32'}
@@ -166,6 +219,21 @@ PrivateKey = <generate-on-proxmox-gateway>
 PublicKey = ${vpn.appServerPublicKey || '<app-server-public-key>'}
 PresharedKey = ${vpn.presharedKey || '<optional-preshared-key>'}
 AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
+
+    const fallbackAllowedTemplateOptions = (settings.proxmox?.allowedTemplates || '')
+        .split('\n')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+
+    const defaultTemplateOptions = proxmoxTemplates.length > 0
+        ? proxmoxTemplates.map((template) => ({
+            value: String(template.vmid),
+            label: `${template.name || `VM ${template.vmid}`} (${template.vmid})`
+        }))
+        : fallbackAllowedTemplateOptions.map((templateId) => ({
+            value: templateId,
+            label: templateId
+        }));
 
     if (loading) {
         return (
@@ -225,20 +293,20 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
 
             {/* Status Messages */}
             {testResult && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 ${testResult.type === 'success' ? 'bg-primary/10 border border-primary/50 text-primary/60' : 'bg-red-500/10 border border-red-500/50 text-red-400'}`}>
+                <div className={`p-4 rounded-xl flex items-center gap-3 ${testResult.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-600' : 'bg-red-50 border border-red-200 text-red-600'}`}>
                     {testResult.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
                     {testResult.message}
                 </div>
             )}
 
             {/* Content */}
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 backdrop-blur-xl">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                 {activeTab === 'general' && (
                     <div className="space-y-4">
-                        <h3 className="text-lg font-bold mb-4">App Branding</h3>
+                        <h3 className="text-lg font-bold mb-4 text-black">App Branding</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">App Name</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">App Name</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
@@ -254,12 +322,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="ACETEL Virtual Laboratory Platform"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Primary Logo URL</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Primary Logo URL</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
@@ -267,7 +335,6 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                     onChange={(e) => setSettings({
                                         ...settings,
                                         general: {
-                                            ...settings.general,
                                             appName: settings.general?.appName || '',
                                             logoUrl: e.target.value,
                                             secondaryLogoUrl: settings.general?.secondaryLogoUrl || '',
@@ -276,12 +343,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="https://upload.wikimedia.org/wikipedia/commons/a/a1/National_Open_University_of_Nigeria_Logo.png"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Secondary Logo URL</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Secondary Logo URL</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
@@ -289,7 +356,6 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                     onChange={(e) => setSettings({
                                         ...settings,
                                         general: {
-                                            ...settings.general,
                                             appName: settings.general?.appName || '',
                                             logoUrl: settings.general?.logoUrl || '',
                                             secondaryLogoUrl: e.target.value,
@@ -298,12 +364,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="https://acetel.nou.edu.ng/wp-content/uploads/2019/06/acetel-logo.png"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Favicon URL</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Favicon URL</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
@@ -311,7 +377,6 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                     onChange={(e) => setSettings({
                                         ...settings,
                                         general: {
-                                            ...settings.general,
                                             appName: settings.general?.appName || '',
                                             logoUrl: settings.general?.logoUrl || '',
                                             secondaryLogoUrl: settings.general?.secondaryLogoUrl || '',
@@ -320,12 +385,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="https://example.com/favicon.ico"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Primary Color</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Primary Color</label>
                                 <input
                                     type="color"
                                     disabled={!isAdmin}
@@ -333,7 +398,6 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                     onChange={(e) => setSettings({
                                         ...settings,
                                         general: {
-                                            ...settings.general,
                                             appName: settings.general?.appName || '',
                                             logoUrl: settings.general?.logoUrl || '',
                                             secondaryLogoUrl: settings.general?.secondaryLogoUrl || '',
@@ -342,11 +406,11 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: settings.general?.secondaryColor || '#8b5cf6'
                                         }
                                     })}
-                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full h-10 bg-white border border-slate-300 rounded-xl px-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Secondary Color</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Secondary Color</label>
                                 <input
                                     type="color"
                                     disabled={!isAdmin}
@@ -354,7 +418,6 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                     onChange={(e) => setSettings({
                                         ...settings,
                                         general: {
-                                            ...settings.general,
                                             appName: settings.general?.appName || '',
                                             logoUrl: settings.general?.logoUrl || '',
                                             secondaryLogoUrl: settings.general?.secondaryLogoUrl || '',
@@ -363,7 +426,7 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                             secondaryColor: e.target.value
                                         }
                                     })}
-                                    className="w-full h-10 bg-slate-900 border border-slate-700 rounded-xl px-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full h-10 bg-white border border-slate-300 rounded-xl px-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
@@ -382,47 +445,47 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
 
                 {activeTab === 'smtp' && (
                     <div className="space-y-4">
-                        <h3 className="text-lg font-bold mb-4">SMTP Configuration</h3>
+                        <h3 className="text-lg font-bold mb-4 text-black">SMTP Configuration</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">SMTP Host</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">SMTP Host</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.smtp?.host || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, host: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="smtp.gmail.com"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Port</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Port</label>
                                 <input
                                     type="number"
                                     disabled={!isAdmin}
                                     value={settings.smtp?.port || 587}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, port: parseInt(e.target.value) } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Username</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Username</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.smtp?.auth?.user || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, auth: { ...settings.smtp?.auth, user: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Password</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Password</label>
                                 <input
                                     type="password"
                                     disabled={!isAdmin}
                                     value={settings.smtp?.auth?.pass || ''}
                                     onChange={(e) => setSettings({ ...settings, smtp: { ...settings.smtp, auth: { ...settings.smtp?.auth, pass: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
@@ -438,7 +501,7 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                 </button>
                                 <button
                                     onClick={testSMTP}
-                                    className="px-6 py-2 bg-primary hover:bg-primary/80 text-white rounded-xl font-bold transition flex items-center gap-2"
+                                    className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition flex items-center gap-2"
                                 >
                                     <TestTube className="w-4 h-4" />
                                     Test Connection
@@ -450,47 +513,47 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
 
                 {activeTab === 's3' && (
                     <div className="space-y-4">
-                        <h3 className="text-lg font-bold mb-4">S3 Storage Configuration</h3>
+                        <h3 className="text-lg font-bold mb-4 text-black">S3 Storage Configuration</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Region</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Region</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.s3?.region || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, region: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="us-east-1"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Bucket Name</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Bucket Name</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.s3?.bucket || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, bucket: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Access Key ID</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Access Key ID</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.s3?.credentials?.accessKeyId || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, credentials: { ...settings.s3?.credentials, accessKeyId: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Secret Access Key</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Secret Access Key</label>
                                 <input
                                     type="password"
                                     disabled={!isAdmin}
                                     value={settings.s3?.credentials?.secretAccessKey || ''}
                                     onChange={(e) => setSettings({ ...settings, s3: { ...settings.s3, credentials: { ...settings.s3?.credentials, secretAccessKey: e.target.value } } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                         </div>
@@ -510,172 +573,190 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                 {activeTab === 'proxmox' && (
                     <div className="space-y-6">
                         <div>
-                            <h3 className="text-lg font-bold mb-2">Proxmox Provisioning</h3>
-                            <p className="text-sm text-slate-400">
+                            <h3 className="text-lg font-bold mb-2 text-black">Proxmox Provisioning</h3>
+                            <p className="text-sm text-slate-600">
                                 Configure the Proxmox API, the VM network path, and the browser-terminal connectivity model for local lab provisioning.
                             </p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Proxmox API URL</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Proxmox API URL</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.apiUrl || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, apiUrl: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="https://proxmox.example.com:8006/api2/json"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Node Name</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Node Name</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.nodeName || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, nodeName: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="pve"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Realm</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Realm</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.realm || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, realm: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="pam"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">API Token ID</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">API Token ID</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.apiTokenId || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, apiTokenId: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="lab-automation@pve!booking-system"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">API Token Secret</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">API Token Secret</label>
                                 <input
                                     type="password"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.apiTokenSecret || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, apiTokenSecret: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="Stored securely"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Storage</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Storage</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.storage || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, storage: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="local-lvm"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Network Bridge</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Network Bridge</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.networkBridge || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, networkBridge: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="vmbr0"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Default Template</label>
-                                <input
-                                    type="text"
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Default Template</label>
+                                <select
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.defaultTemplate || ''}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, defaultTemplate: e.target.value } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
-                                    placeholder="ubuntu-22-04-base"
-                                />
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
+                                >
+                                    <option value="">Select template</option>
+                                    {defaultTemplateOptions.map((template) => (
+                                        <option key={template.value} value={template.value}>
+                                            {template.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Cleanup Grace Days</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Cleanup Grace Days</label>
                                 <input
                                     type="number"
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.cleanupGraceDays || 0}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, cleanupGraceDays: parseInt(e.target.value || '0', 10) } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Terminal Mode</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Terminal Mode</label>
                                 <select
                                     disabled={!isAdmin}
                                     value={settings.proxmox?.terminalMode || 'vpn_gateway'}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, terminalMode: e.target.value as 'vpn_gateway' | 'direct_host' | 'bastion' } })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 >
                                     <option value="vpn_gateway">VPN Gateway</option>
                                     <option value="direct_host">Direct Host Routing</option>
                                     <option value="bastion">Bastion Host</option>
                                 </select>
                             </div>
-                            <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3">
+                            <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3">
                                 <input
                                     id="vpnRequired"
                                     type="checkbox"
                                     disabled={!isAdmin}
                                     checked={settings.proxmox?.vpnRequired ?? true}
                                     onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, vpnRequired: e.target.checked } })}
-                                    className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+                                    className="h-4 w-4 rounded border-slate-300 bg-white"
                                 />
-                                <label htmlFor="vpnRequired" className="text-sm font-medium text-slate-200">
+                                <label htmlFor="vpnRequired" className="text-sm font-medium text-slate-700">
                                     Use VPN/private routing for browser terminal access
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Allowed Templates</label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-xs font-bold text-black uppercase">Allowed Templates</label>
+                                {isAdmin && (
+                                    <button
+                                        type="button"
+                                        onClick={fetchProxmoxTemplates}
+                                        disabled={fetchingTemplates}
+                                        className="text-[10px] font-black uppercase text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+                                    >
+                                        {fetchingTemplates ? <RefreshCw className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                        Fetch from Proxmox
+                                    </button>
+                                )}
+                            </div>
                             <textarea
                                 disabled={!isAdmin}
                                 value={settings.proxmox?.allowedTemplates || ''}
                                 onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, allowedTemplates: e.target.value } })}
-                                className="w-full min-h-24 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                className="w-full min-h-24 bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 placeholder="ubuntu-22-04-base&#10;kali-linux-base&#10;debian-12-lab"
                             />
                         </div>
 
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Provisioning Notes</label>
+                            <label className="text-xs font-bold text-black uppercase block mb-2">Provisioning Notes</label>
                             <textarea
                                 disabled={!isAdmin}
                                 value={settings.proxmox?.notes || ''}
                                 onChange={(e) => setSettings({ ...settings, proxmox: { ...settings.proxmox, notes: e.target.value } })}
-                                className="w-full min-h-24 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                className="w-full min-h-24 bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                 placeholder="Technician guidance, naming rules, VLAN notes, or cleanup expectations."
                             />
                         </div>
 
-                        <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-5 space-y-4">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-4">
                             <div className="flex items-center gap-2">
                                 <Network className="w-5 h-5 text-primary" />
-                                <h4 className="font-bold text-slate-100">VPN / Network Guidance</h4>
+                                <h4 className="font-bold text-black">VPN / Network Guidance</h4>
                             </div>
-                            <p className="text-sm text-slate-300">
+                            <p className="text-sm text-slate-700">
                                 A public Proxmox host IP does not automatically give every VM a public IP. For in-browser SSH, the safer model is to keep VMs on a private subnet and let this platform reach them through a VPN, routed private link, or bastion.
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">VPN Endpoint</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">VPN Endpoint</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -687,12 +768,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, endpoint: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="vpn.example.com:51820"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">VPN Listen Port</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">VPN Listen Port</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -704,12 +785,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, listenPort: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="51820"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Private Subnet</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">Private Subnet</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -721,12 +802,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, subnet: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="10.50.0.0/24"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Gateway Client Address</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">Gateway Client Address</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -738,12 +819,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, clientAddress: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="10.50.0.2/32"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Gateway Tunnel Address</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">Gateway Tunnel Address</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -755,12 +836,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, gatewayAddress: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="10.99.0.1/24"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">VPN Private Key</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">VPN Private Key</label>
                                     <input
                                         type="password"
                                         disabled={!isAdmin}
@@ -772,12 +853,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, privateKey: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="Stored securely"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">App Server Public Key</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">App Server Public Key</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -789,12 +870,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, appServerPublicKey: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="Paste app server public key"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Gateway Public Key</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">Gateway Public Key</label>
                                     <input
                                         type="text"
                                         disabled={!isAdmin}
@@ -806,12 +887,12 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, gatewayPublicKey: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="Paste Proxmox gateway public key"
                                     />
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">VPN Preshared Key</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">VPN Preshared Key</label>
                                     <input
                                         type="password"
                                         disabled={!isAdmin}
@@ -823,19 +904,19 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                                 vpn: { ...settings.proxmox?.vpn, presharedKey: e.target.value }
                                             }
                                         })}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                         placeholder="Optional depending on VPN design"
                                     />
                                 </div>
                             </div>
-                            <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-300 space-y-2">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 space-y-2">
                                 <p>Recommended deployment:</p>
                                 <p>1. Keep student VMs on a private bridge or VLAN in Proxmox.</p>
                                 <p>2. Give the web app or terminal gateway private connectivity to that network.</p>
                                 <p>3. Render SSH in the browser using `xterm.js` and a backend WebSocket-to-SSH bridge.</p>
                                 <p>4. Only expose the main web app publicly; do not expose each student VM directly unless strictly required.</p>
                             </div>
-                            <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-300 space-y-3">
+                            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 space-y-3">
                                 <p>WireGuard setup steps:</p>
                                 <p>1. Generate a key pair on the app server and paste the private key here and the public key into the field below.</p>
                                 <p>2. Generate a key pair on the Proxmox-side gateway and paste only the gateway public key here.</p>
@@ -845,44 +926,54 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                             </div>
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">App Server WireGuard Config</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">App Server WireGuard Config</label>
                                     <textarea
                                         readOnly
                                         value={wireGuardAppConfig}
-                                        className="w-full min-h-52 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 font-mono text-xs"
+                                        className="w-full min-h-52 bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-black font-mono text-xs"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Proxmox Gateway WireGuard Config</label>
+                                    <label className="text-xs font-bold text-black uppercase block mb-2">Proxmox Gateway WireGuard Config</label>
                                     <textarea
                                         readOnly
                                         value={wireGuardGatewayConfig}
-                                        className="w-full min-h-44 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 font-mono text-xs"
+                                        className="w-full min-h-44 bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-black font-mono text-xs"
                                     />
                                 </div>
                             </div>
                         </div>
 
                         {isAdmin && (
-                            <button
-                                onClick={() => saveSettings('proxmox', settings.proxmox)}
-                                disabled={saving}
-                                className="px-6 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white rounded-xl font-bold transition flex items-center gap-2"
-                            >
-                                <Save className="w-4 h-4" />
-                                Save Proxmox Settings
-                            </button>
+                            <div className="flex gap-4 mt-4">
+                                <button
+                                    onClick={() => saveSettings('proxmox', settings.proxmox)}
+                                    disabled={saving}
+                                    className="px-6 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Save Proxmox Settings
+                                </button>
+                                <button
+                                    onClick={testProxmox}
+                                    disabled={saving}
+                                    className="px-6 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-xl font-bold transition flex items-center gap-2"
+                                >
+                                    <TestTube className="w-4 h-4" />
+                                    Test Connection
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
 
                 {activeTab === 'templates' && (
                     <div className="space-y-4">
-                        <h3 className="text-lg font-bold mb-4">Email Templates</h3>
-                        <p className="text-sm text-slate-400">Configure email templates for system notifications. Use {'{{'} variableName {'}}'}  for dynamic content.</p>
+                        <h3 className="text-lg font-bold mb-4 text-black">Email Templates</h3>
+                        <p className="text-sm text-slate-600">Configure email templates for system notifications. Use {'{{'} variableName {'}}'}  for dynamic content.</p>
                         <div className="space-y-4 mt-4">
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Welcome Email Subject</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Welcome Email Subject</label>
                                 <input
                                     type="text"
                                     disabled={!isAdmin}
@@ -891,15 +982,18 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                         ...settings,
                                         notification_templates: {
                                             ...settings.notification_templates,
-                                            welcome: { ...settings.notification_templates?.welcome, subject: e.target.value }
+                                            welcome: { 
+                                                ...settings.notification_templates?.welcome,
+                                                subject: e.target.value 
+                                            }
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none disabled:opacity-50"
                                     placeholder="Welcome to {{appName}}"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Welcome Email Body</label>
+                                <label className="text-xs font-bold text-black uppercase block mb-2">Welcome Email Body</label>
                                 <textarea
                                     rows={4}
                                     disabled={!isAdmin}
@@ -908,10 +1002,13 @@ AllowedIPs = ${vpn.clientAddress || '10.99.0.2/32'}`;
                                         ...settings,
                                         notification_templates: {
                                             ...settings.notification_templates,
-                                            welcome: { ...settings.notification_templates?.welcome, body: e.target.value }
+                                            welcome: { 
+                                                ...settings.notification_templates?.welcome,
+                                                body: e.target.value 
+                                            }
                                         }
                                     })}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 outline-none resize-none disabled:opacity-50"
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:ring-2 focus:ring-primary/80 text-black outline-none resize-none disabled:opacity-50"
                                     placeholder="Hello {{name}}, welcome to the platform!"
                                 />
                             </div>

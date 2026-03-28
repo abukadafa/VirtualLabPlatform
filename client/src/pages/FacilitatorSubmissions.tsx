@@ -350,8 +350,8 @@ const FacilitatorSubmissions: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                         <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-blue-500/20 rounded-lg">
-                                    <FileText className="w-6 h-6 text-blue-400" />
+                                <div className="p-3 bg-primary/80/20 rounded-lg">
+                                    <FileText className="w-6 h-6 text-primary/60" />
                                 </div>
                                 <div>
                                     <p className="text-slate-400 text-sm">Total Submissions</p>
@@ -372,8 +372,8 @@ const FacilitatorSubmissions: React.FC = () => {
                         </div>
                         <div className="bg-slate-800/50 backdrop-blur-xl rounded-xl p-6 border border-slate-700/50">
                             <div className="flex items-center gap-4">
-                                <div className="p-3 bg-green-500/20 rounded-lg">
-                                    <CheckCircle className="w-6 h-6 text-green-400" />
+                                <div className="p-3 bg-primary/20 rounded-lg">
+                                    <CheckCircle className="w-6 h-6 text-primary/60" />
                                 </div>
                                 <div>
                                     <p className="text-slate-400 text-sm">Graded</p>
@@ -454,7 +454,7 @@ const FacilitatorSubmissions: React.FC = () => {
                             <button
                                 onClick={() => setFilterStatus('graded')}
                                 className={`px-4 py-2 rounded-lg font-medium transition text-sm ${filterStatus === 'graded'
-                                    ? 'bg-green-600 text-white shadow-lg shadow-green-600/20'
+                                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
                                     : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                                     }`}
                             >
@@ -472,7 +472,7 @@ const FacilitatorSubmissions: React.FC = () => {
                         <button
                             onClick={handleBulkDownload}
                             disabled={bulkDownloading}
-                            className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold transition shadow-xl shadow-blue-600/20 disabled:opacity-50"
+                            className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-700 text-white rounded-xl text-sm font-bold transition shadow-xl shadow-primary/20 disabled:opacity-50"
                         >
                             {bulkDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                             Download {selectedSubmissionIds.size} Submissions
@@ -495,7 +495,7 @@ const FacilitatorSubmissions: React.FC = () => {
                                         <th className="px-4 py-4 w-10">
                                             <button onClick={toggleSelectAll}>
                                                 {selectedSubmissionIds.size === filteredSubmissions.length && filteredSubmissions.length > 0
-                                                    ? <CheckSquare className="w-5 h-5 text-blue-400" />
+                                                    ? <CheckSquare className="w-5 h-5 text-primary/60" />
                                                     : <SquareIcon className="w-5 h-5 text-slate-600" />}
                                             </button>
                                         </th>
@@ -524,11 +524,11 @@ const FacilitatorSubmissions: React.FC = () => {
                                 </thead>
                                 <tbody className="divide-y divide-slate-700/50">
                                     {filteredSubmissions.map((submission) => (
-                                        <tr key={submission._id} className={`hover:bg-slate-700/30 transition-colors ${selectedSubmissionIds.has(submission._id) ? 'bg-blue-500/5' : ''}`}>
+                                        <tr key={submission._id} className={`hover:bg-slate-700/30 transition-colors ${selectedSubmissionIds.has(submission._id) ? 'bg-primary/80/5' : ''}`}>
                                             <td className="px-4 py-4">
                                                 <button onClick={() => toggleSelection(submission._id)}>
                                                     {selectedSubmissionIds.has(submission._id)
-                                                        ? <CheckSquare className="w-5 h-5 text-blue-400" />
+                                                        ? <CheckSquare className="w-5 h-5 text-primary/60" />
                                                         : <SquareIcon className="w-5 h-5 text-slate-700" />}
                                                 </button>
                                             </td>
@@ -651,7 +651,7 @@ const FacilitatorSubmissions: React.FC = () => {
                                         {selectedSubmission.files.map((file, idx) => (
                                             <div key={idx} className="flex items-center justify-between p-3 bg-slate-800 rounded-xl border border-slate-700">
                                                 <div className="flex items-center gap-3">
-                                                    <FileText className="w-5 h-5 text-blue-400" />
+                                                    <FileText className="w-5 h-5 text-primary/60" />
                                                     <div>
                                                         <p className="text-xs font-bold text-white truncate max-w-[150px]">{file.name}</p>
                                                         <p className="text-[10px] text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -659,7 +659,7 @@ const FacilitatorSubmissions: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => handleDownload(selectedSubmission._id, idx, file.name)}
-                                                    className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition"
+                                                    className="p-2 hover:bg-primary/80/20 text-primary/60 rounded-lg transition"
                                                     title="Download File"
                                                 >
                                                     <Download className="w-4 h-4" />

@@ -42,8 +42,8 @@ export const register = async (req: AuthRequest, res: Response) => {
         // Create new user
         const user = new User({
             name,
-            username,
-            email,
+            username: normalizedUsername,
+            email: normalizedEmail,
             password,
             role: targetRole,
             programmes: programmes || [],
@@ -198,9 +198,11 @@ export const forgotPassword = async (req: AuthRequest, res: Response) => {
     try {
         const { email } = req.body;
 
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: email?.toLowerCase().trim() });
+        
+        // SECURITY: Always return success to prevent user enumeration
         if (!user) {
-            return res.status(404).json({ message: 'No user found with that email address' });
+            return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
         }
 
         // Generate reset token
@@ -219,16 +221,14 @@ export const forgotPassword = async (req: AuthRequest, res: Response) => {
                 name: user.name,
                 resetLink: resetUrl
             });
-
-            res.json({ message: 'Password reset email sent successfully' });
         } catch (emailError) {
-            user.resetPasswordToken = undefined;
-            user.resetPasswordExpires = undefined;
-            await user.save();
-            throw emailError;
+            console.error('[ForgotPassword] Email failed:', emailError);
+            // We don't throw here to maintain the generic success message
         }
+
+        res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
     } catch (error: any) {
-        res.status(500).json({ message: 'Error sending password reset email', error: error.message });
+        res.status(500).json({ message: 'Error processing password reset request', error: error.message });
     }
 };
 

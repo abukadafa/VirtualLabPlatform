@@ -4,17 +4,21 @@ import Feedback from '../models/Feedback.model';
 import { AuthRequest } from '../middleware/auth.middleware';
 import emailService from '../services/email.service';
 
+const isStudentUser = (user: { role?: string }) => user.role === 'student';
+
 // Get all users (Admin only / Facilitators see students in their programmes)
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
     try {
         let query: any = { isDeleted: { $ne: true } };
         
-        // Restriction: Facilitators only see users they created
         if (req.user?.role === 'facilitator') {
             query = {
                 ...query,
+                role: 'student',
                 addedBy: req.user.id
             };
+        } else if (req.user?.role === 'lab technician') {
+            query.role = 'student';
         } else if (req.user?.role !== 'admin' && req.user?.role !== 'lab technician') {
             // Other roles (like students) shouldn't even reach here due to route guards, 
             // but just in case, only show themselves
@@ -177,7 +181,10 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Restriction: Facilitators only see students in their assigned programmes or users they created
+        if (req.user?.role !== 'admin' && !isStudentUser(user)) {
+            return res.status(403).json({ message: 'Access denied. Only administrators can manage staff accounts.' });
+        }
+
         if (req.user?.role === 'facilitator') {
             const facilitatorProgrammes = req.user.programmes || [];
             const hasCommonProgramme = user.programmes.some(p => facilitatorProgrammes.includes(p));
@@ -202,71 +209,112 @@ export const getUserById = async (req: AuthRequest, res: Response) => {
         // Update user (Admin/Facilitator with permission)
 export const updateUser = async (req: AuthRequest, res: Response) => {
     try {
-        const { username, password, programmes, ...updates } = req.body;
+        const { id } = req.params;
+        const { 
+            name, 
+            username, 
+            password, 
+            email, 
+            role, 
+            status, 
+            programmes, 
+            studentId, 
+            completionDate,
+            lastEnrollmentDate
+        } = req.body;
 
-        const user = await User.findById(req.params.id);
+        const user = await User.findById(id);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // Restriction: Non-admins can only edit students
-        if (req.user?.role !== 'admin' && user.role !== 'student') {
+        const isAdmin = req.user?.role === 'admin';
+        const isFacilitator = req.user?.role === 'facilitator';
+
+        // Restriction: Non-admins can only edit student accounts
+        if (!isAdmin && !isStudentUser(user)) {
             return res.status(403).json({ message: 'Access denied. You can only edit student accounts.' });
         }
 
-        // Restriction: Facilitators can only edit students in their assigned programmes or users they created
-        if (req.user?.role === 'facilitator') {
-            const facilitatorProgrammes = req.user.programmes || [];
+        if (isFacilitator) {
+            const facilitatorProgrammes = req.user?.programmes || [];
             const hasCommonProgramme = user.programmes.some(p => facilitatorProgrammes.includes(p));
-            const isCreator = user.addedBy === req.user.id;
+            const isCreator = user.addedBy === req.user?.id;
 
             if (!hasCommonProgramme && !isCreator) {
                 return res.status(403).json({ message: 'Access denied. You can only edit students in your assigned programmes or those you created.' });
             }
 
-            // Also restrict the programmes they can assign to the user (unless they are admin, but this block is for facilitator)
-            if (programmes) {
-                const invalidProgs = programmes.filter((p: string) => !facilitatorProgrammes.includes(p));
-                if (invalidProgs.length > 0) {
-                    return res.status(403).json({ message: `Access denied. You cannot assign these programmes: ${invalidProgs.join(', ')}` });
-                }
+            // Facilitators cannot change roles
+            if (role && role !== 'student') {
+                return res.status(403).json({ message: 'Access denied. You cannot assign non-student roles.' });
             }
-        }
 
-        // Restriction: Non-admins cannot change a user's role to something other than student
-        if (req.user?.role !== 'admin' && updates.role && updates.role !== 'student') {
-            return res.status(403).json({ message: 'Access denied. You cannot assign non-student roles.' });
+            // Facilitators cannot change status to administrative ones or change critical enrollment dates
+            if (status && !['enrolled', 'completed', 'inactive'].includes(status)) {
+                 return res.status(403).json({ message: 'Access denied. Invalid status assignment.' });
+            }
         }
 
         // Handle username update with uniqueness check
         if (username && username !== user.username) {
             const existing = await User.findOne({ username: username.toLowerCase() });
-            if (existing) {
+            if (existing && existing._id.toString() !== id) {
                 return res.status(400).json({ message: 'Username is already taken' });
             }
-            user.username = username;
+            user.username = username.toLowerCase();
         }
 
-        // Handle password update
-        if (password) {
-            user.password = password;
+        // Handle email update with uniqueness check
+        if (email && email !== user.email) {
+            const existing = await User.findOne({ email: email.toLowerCase() });
+            if (existing && existing._id.toString() !== id) {
+                return res.status(400).json({ message: 'Email is already taken' });
+            }
+            user.email = email.toLowerCase();
         }
 
-        // Handle programmes update
+        // Basic Info Updates (Allowed for Admin and authorized Facilitators)
+        if (name) user.name = name;
+        if (password) user.password = password;
+        if (studentId !== undefined) user.studentId = studentId;
+
+        // Restricted Updates (Admin Only)
+        if (isAdmin) {
+            if (role) user.role = role;
+            if (status) {
+                if (status === 'suspended') user.status = 'inactive';
+                else if (status === 'graduated') user.status = 'completed';
+                else user.status = status;
+            }
+            if (completionDate) user.completionDate = completionDate;
+            if (lastEnrollmentDate) user.lastEnrollmentDate = lastEnrollmentDate;
+        } else if (isFacilitator) {
+            // Facilitators can update status to enrolled/completed/inactive
+            if (status) {
+                if (status === 'suspended') user.status = 'inactive';
+                else if (status === 'graduated') user.status = 'completed';
+                else user.status = status;
+            }
+        }
+
+        // Programmes update with restriction for facilitators
         if (programmes) {
+            if (isFacilitator) {
+                const facilitatorProgrammes = req.user?.programmes || [];
+                const invalidProgs = programmes.filter((p: string) => !facilitatorProgrammes.includes(p));
+                if (invalidProgs.length > 0) {
+                    return res.status(403).json({ message: `Access denied. You cannot assign these programmes: ${invalidProgs.join(', ')}` });
+                }
+            }
             user.programmes = programmes;
-        } else if (req.body.programme) {
-            user.programmes = [req.body.programme];
         }
 
-        // Handle other updates
         const oldStatus = user.status;
-        Object.assign(user, updates);
-
         await user.save();
 
         // Send notification if status changed
-        if (updates.status && updates.status !== oldStatus) {
+        if (status && status !== oldStatus) {
             try {
                 await emailService.sendEmail(user.email, 'enrollment_notification', {
                     name: user.name,
@@ -452,8 +500,8 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
         const user = new User({
             name,
-            username,
-            email,
+            username: normalizedUsername,
+            email: normalizedEmail,
             password: password || 'Welcome123', // Default password
             role: role || 'student',
             programmes: programmes || (req.body.programme ? [req.body.programme] : []),
@@ -523,6 +571,8 @@ export const bulkCreateUsers = async (req: AuthRequest, res: Response) => {
 
                 const user = new User({
                     ...userData,
+                    username: normalizedUsername,
+                    email: normalizedEmail,
                     programmes: userData.programmes || (userData.programme ? [userData.programme] : []),
                     password: userData.password || defaultPassword || 'Welcome123',
                     status: 'enrolled',
@@ -553,5 +603,88 @@ export const bulkCreateUsers = async (req: AuthRequest, res: Response) => {
         res.status(201).json(results);
     } catch (error: any) {
         res.status(500).json({ message: 'Server error', error: error.message });
+    }
+};
+
+// Bulk Notify Users
+export const bulkNotifyUsers = async (req: AuthRequest, res: Response) => {
+    try {
+        const { userIds } = req.body;
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ message: 'Select at least one user.' });
+        }
+
+        const users = await User.find({ _id: { $in: userIds } });
+        let sent = 0;
+        let failed = 0;
+
+        for (const user of users) {
+            try {
+                await emailService.sendEmail(user.email, 'enrollment_notification', {
+                    name: user.name,
+                    status: user.status,
+                    role: user.role,
+                    programmes: user.programmes.join(', ')
+                });
+                sent++;
+            } catch (err) {
+                console.error(`Failed to notify ${user.email}:`, err);
+                failed++;
+            }
+        }
+
+        res.json({ message: `Notification process completed. Sent: ${sent}, Failed: ${failed}` });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error during bulk notification', error: error.message });
+    }
+};
+
+// Bulk Update Status (e.g., disable/graduated)
+export const bulkUpdateStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const { userIds, status } = req.body;
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ message: 'Select at least one user.' });
+        }
+        
+        // Map UI statuses to model statuses if needed
+        let targetStatus = status;
+        if (status === 'suspended') targetStatus = 'inactive';
+        else if (status === 'graduated') targetStatus = 'completed';
+
+        if (!['enrolled', 'completed', 'inactive'].includes(targetStatus)) {
+            return res.status(400).json({ message: 'Invalid status' });
+        }
+
+        const isAdmin = req.user?.role === 'admin';
+        const isFacilitator = req.user?.role === 'facilitator';
+
+        const users = await User.find({ _id: { $in: userIds } });
+        const targetIds = [];
+
+        for (const user of users) {
+            if (isAdmin) {
+                targetIds.push(user._id);
+            } else if (isFacilitator && user.role === 'student') {
+                 const facilitatorProgrammes = req.user?.programmes || [];
+                 const hasCommonProgramme = user.programmes.some(p => facilitatorProgrammes.includes(p));
+                 const isCreator = user.addedBy === req.user?.id;
+                 if (hasCommonProgramme || isCreator) {
+                     targetIds.push(user._id);
+                 }
+            } else if (req.user?.role === 'lab technician' && user.role === 'student') {
+                targetIds.push(user._id);
+            }
+        }
+
+        if (targetIds.length === 0) {
+            return res.status(403).json({ message: 'No authorized users found in selection for this action.' });
+        }
+
+        await User.updateMany({ _id: { $in: targetIds } }, { $set: { status: targetStatus } });
+
+        res.json({ message: `Successfully updated status to ${status} for ${targetIds.length} users.` });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error during bulk status update', error: error.message });
     }
 };

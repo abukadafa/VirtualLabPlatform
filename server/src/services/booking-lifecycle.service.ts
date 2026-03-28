@@ -34,7 +34,11 @@ class BookingLifecycleService {
                 try {
                     await proxmoxService.stopVm(localConfig.vmId, localConfig.nodeName);
                 } catch (error) {
+                    if (proxmoxService.isMissingVmError(error)) {
+                        console.warn(`[BookingLifecycle] VM ${localConfig.vmId} is already missing during stop; marking booking expired.`);
+                    } else {
                     console.error(`[BookingLifecycle] Failed to stop VM ${localConfig.vmId}:`, error);
+                    }
                 }
             }
 
@@ -65,8 +69,12 @@ class BookingLifecycleService {
                 try {
                     await proxmoxService.deleteVm(localConfig.vmId, localConfig.nodeName);
                 } catch (error) {
-                    console.error(`[BookingLifecycle] Failed to delete VM ${localConfig.vmId}:`, error);
-                    continue;
+                    if (proxmoxService.isMissingVmError(error)) {
+                        console.warn(`[BookingLifecycle] VM ${localConfig.vmId} already absent during delete; marking booking deleted.`);
+                    } else {
+                        console.error(`[BookingLifecycle] Failed to delete VM ${localConfig.vmId}:`, error);
+                        continue;
+                    }
                 }
             }
 

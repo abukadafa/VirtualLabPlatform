@@ -5,6 +5,56 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import emailService from '../services/email.service';
 import proxmoxService from '../services/proxmox.service';
 import configService from '../services/config.service';
+
+// ... existing imports ...
+
+// Generate a VNC console ticket for a local VM
+export const getVncConsole = async (req: AuthRequest, res: Response) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found' });
+        }
+
+        // Only allow if booking belongs to user or admin
+        const isOwner = booking.user.toString() === req.user?.id;
+        const isAdmin = req.user?.role === 'admin';
+        
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ message: 'Unauthorized' });
+        }
+
+        if (booking.provisioningType !== 'local' || booking.provisioningStatus !== 'provisioned') {
+            return res.status(400).json({ message: 'VNC console only available for provisioned local labs' });
+        }
+
+        const vmId = booking.localProvisioning?.vmId;
+        const nodeName = booking.localProvisioning?.nodeName;
+
+        if (!vmId) {
+            return res.status(400).json({ message: 'VM ID not found in booking' });
+        }
+
+        const vncData = await proxmoxService.getVncProxy(vmId, nodeName);
+        const proxmoxConfig = await configService.get<any>('proxmox');
+        
+        // Construct the URL to Proxmox's noVNC console
+        // We use the ticket, port, and user from the API response
+        const pveHost = new URL(proxmoxConfig.apiUrl).hostname;
+        const pvePort = new URL(proxmoxConfig.apiUrl).port || '8006';
+        
+        const consoleUrl = `https://${pveHost}:${pvePort}/?console=kvm&novnc=1&vmid=${vmId}&vmname=lab-${vmId}&node=${vncData.node || nodeName || 'pve'}&resize=scale&password=${encodeURIComponent(vncData.ticket)}`;
+
+        res.json({ 
+            url: consoleUrl,
+            ticket: vncData.ticket,
+            port: vncData.port,
+            user: vncData.user
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to generate VNC console', error: error.message });
+    }
+};
 import localProvisioningQueueService from '../services/local-provisioning-queue.service';
 
 const deriveLegacyStatus = (booking: any) => {
@@ -223,14 +273,23 @@ export const grantLabInstance = async (req: AuthRequest, res: Response) => {
         if (adminNote) booking.adminNote = adminNote;
 
         if (provisioningType === 'local') {
-            booking.provisioningStatus = 'pending';
-            booking.status = 'requested';
-            booking.adminNote = adminNote || 'Local VM queued for provisioning.';
+            const localConfig = booking.localProvisioning as any || {};
+            if (localConfig.templateName) {
+                booking.provisioningStatus = 'pending';
+                booking.status = 'requested';
+                booking.adminNote = adminNote || 'Local VM queued for provisioning.';
+            } else {
+                // Manual provisioning mode
+                booking.provisioningStatus = 'provisioned';
+                booking.status = 'granted';
+                booking.provisionedAt = new Date();
+                booking.adminNote = adminNote || 'Lab provisioned manually by administrator.';
+            }
         }
 
         await booking.save();
 
-        if (provisioningType === 'local') {
+        if (provisioningType === 'local' && (booking.localProvisioning as any)?.templateName) {
             await localProvisioningQueueService.enqueue(booking._id.toString());
         }
 
@@ -319,11 +378,11 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: 'Booking not found' });
         }
 
-        const canApprove = req.user?.role === 'admin' || req.user?.permissions?.includes('manage_labs');
+        const canApprove = req.user?.role === 'admin' || req.user?.permissions?.includes('manage_labs') || req.user?.permissions?.includes('provision_labs');
         const canProvision = req.user?.role === 'admin' || req.user?.permissions?.includes('provision_labs');
 
         if ((approvalStatus || status) && !canApprove) {
-            return res.status(403).json({ message: 'Approval actions require booking management permission.' });
+            return res.status(403).json({ message: 'Approval actions require booking management or provisioning permission.' });
         }
 
         if ((provisioningType || provisioningStatus || provisionedUrl || req.body.localProvisioning || req.body.awsProvisioning || extensionDecision) && !canProvision) {
@@ -428,20 +487,31 @@ export const updateBooking = async (req: AuthRequest, res: Response) => {
 
         if (booking.provisioningType === 'local' && oldProvisioningStatus !== 'provisioned' && booking.provisioningStatus === 'provisioned') {
             const localConfig = booking.localProvisioning as any || {};
-            booking.provisioningStatus = 'pending';
-            booking.status = 'requested';
-            booking.adminNote = booking.adminNote || 'Local VM queued for provisioning.';
-            await booking.save();
-            await localProvisioningQueueService.enqueue(booking._id.toString());
+            
+            // Only auto-provision if a template is selected. 
+            // If no template is provided, we assume the admin has manually set the IP/VM and just wants to mark it ready.
+            if (localConfig.templateName) {
+                booking.provisioningStatus = 'pending';
+                booking.status = 'requested';
+                booking.adminNote = booking.adminNote || 'Local VM queued for auto-provisioning.';
+                await booking.save();
+                await localProvisioningQueueService.enqueue(booking._id.toString());
 
-            const populatedQueuedBooking = await Booking.findById(booking._id)
-                .populate('lab', 'name type')
-                .populate('user', 'name email');
+                const populatedQueuedBooking = await Booking.findById(booking._id)
+                    .populate('lab', 'name type')
+                    .populate('user', 'name email');
 
-            return res.json({
-                ...populatedQueuedBooking?.toObject(),
-                message: 'Local VM queued for provisioning.'
-            });
+                return res.json({
+                    ...populatedQueuedBooking?.toObject(),
+                    message: 'Local VM queued for provisioning.'
+                });
+            } else {
+                // Manual provisioning mode
+                booking.provisioningStatus = 'provisioned';
+                booking.status = 'granted';
+                booking.provisionedAt = booking.provisionedAt || new Date();
+                booking.adminNote = booking.adminNote || 'Lab provisioned manually by administrator.';
+            }
         }
 
         if (booking.provisioningType === 'local' && booking.expiresAt && oldExpiresAt?.getTime?.() !== booking.expiresAt.getTime()) {
@@ -495,11 +565,6 @@ export const deleteBooking = async (req: AuthRequest, res: Response) => {
         const booking = await Booking.findById(req.params.id).populate('user lab');
         if (!booking) {
             return res.status(404).json({ message: 'Booking not found' });
-        }
-
-        // Restriction: ONLY admins can delete bookings
-        if (req.user?.role !== 'admin') {
-            return res.status(403).json({ message: 'Access denied. Only administrators can perform this action.' });
         }
 
         const auditLogService = (await import('../services/audit-log.service')).default;

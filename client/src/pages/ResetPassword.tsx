@@ -53,17 +53,17 @@ const ResetPassword: React.FC = () => {
         <div className="min-h-screen bg-white flex items-center justify-center p-4">
             <div className="w-full max-w-md bg-white border border-slate-200 rounded-[2.5rem] shadow-xl p-10">
                 <div className="flex items-center justify-center mb-6">
-                    <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-900/10">
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/10">
                         <Lock className="w-8 h-8 text-white" />
                     </div>
                 </div>
                 <h1 className="text-3xl font-black text-center mb-2 text-slate-900 uppercase tracking-tight">
-                    Reset<span className="text-green-600">Password</span>
+                    Reset<span className="text-primary">Password</span>
                 </h1>
                 <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px] text-center mb-10">Secure Identity Update</p>
 
                 {result && (
-                    <div className={`mb-8 p-4 rounded-2xl flex items-center gap-3 ${result.type === 'success' ? 'bg-green-50 border border-green-100 text-green-700' : 'bg-red-50 border border-red-100 text-red-700'}`}>
+                    <div className={`mb-8 p-4 rounded-2xl flex items-center gap-3 ${result.type === 'success' ? 'bg-primary/10 border border-primary/20 text-primary/80' : 'bg-red-50 border border-red-100 text-red-700'}`}>
                         {result.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
                         <p className="text-sm font-bold">{result.message}</p>
                     </div>
@@ -76,7 +76,7 @@ const ResetPassword: React.FC = () => {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300 font-bold"
+                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300 font-bold"
                             placeholder="••••••••••••"
                             required
                         />
@@ -87,7 +87,7 @@ const ResetPassword: React.FC = () => {
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300 font-bold"
+                            className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-300 font-bold"
                             placeholder="••••••••••••"
                             required
                         />
@@ -95,7 +95,7 @@ const ResetPassword: React.FC = () => {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center disabled:bg-green-400 shadow-lg shadow-green-900/10 group active:scale-[0.98] text-lg uppercase tracking-widest"
+                        className="w-full bg-primary hover:bg-primary/80 text-white font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center disabled:bg-primary/60 shadow-lg shadow-primary/10 group active:scale-[0.98] text-lg uppercase tracking-widest"
                     >
                         {loading ? 'Resetting...' : 'Reset Password'}
                     </button>

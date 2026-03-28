@@ -30,9 +30,13 @@ import {
     Archive,
     ShieldOff,
     RefreshCw,
-    Save
+    Save,
+    Server,
+    Mail,
+    UserMinus,
+    LogOut
 } from 'lucide-react';
-import { API_URL, NOUN_ELEARN_URL, AWS_LAUNCH_URL } from '../lib/config';
+import { API_URL, NOUN_ELEARN_URL } from '../lib/config';
 import RoleManagement from '../components/RoleManagement';
 import SystemSettings from '../components/SystemSettings';
 import jsPDF from 'jspdf';
@@ -54,9 +58,13 @@ const AdminManagement: React.FC = () => {
     const [labs, setLabs] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [proxmoxSettings, setProxmoxSettings] = useState<any>(null);
+    const [proxmoxTemplates, setProxmoxTemplates] = useState<any[]>([]);
+    const [proxmoxStatus, setProxmoxStatus] = useState<any>(null);
 
     const isAdmin = user?.role === 'admin';
     const isFacilitator = user?.role === 'facilitator';
+    const isLabTechnician = user?.role === 'lab technician';
 
     // --- State for Modals ---
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -80,21 +88,123 @@ const AdminManagement: React.FC = () => {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState<any>(null);
     const [bookingActionLoading, setBookingActionLoading] = useState(false);
+    const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
     const [isFacilitatorBookingOpen, setIsFacilitatorBookingOpen] = useState(false);
     const [facilitatorBookingData, setFacilitatorBookingData] = useState({ 
         labId: '', date: new Date().toISOString().split('T')[0], startTime: '09:00', endTime: '11:00', purpose: '' 
     });
 
+    const getLogTimestamp = (log: any) => log?.createdAt || log?.timestamp || log?.updatedAt || new Date().toISOString();
+
     useEffect(() => {
         if (!user || (user.role !== 'admin' && user.role !== 'facilitator' && user.role !== 'lab technician')) {
             navigate('/dashboard'); return;
         }
-        if (isFacilitator && ['overview', 'monitoring', 'audit_logs', 'settings', 'recycle_bin', 'roles'].includes(activeTab)) {
+        if ((isFacilitator || isLabTechnician) && ['overview', 'monitoring', 'audit_logs', 'settings', 'recycle_bin', 'roles', 'labs'].includes(activeTab)) {
             setActiveTab('users'); return;
         }
         setData([]); setSelectedIds([]);
         fetchData(); fetchLabsOnly(); fetchRoles();
+        
+        // Fetch Proxmox data for roles that manage labs
+        if (isAdmin || hasPerm('provision_labs')) {
+            fetchProxmoxSettings();
+            fetchProxmoxStatus();
+            fetchProxmoxTemplates();
+        }
     }, [activeTab, user, navigate, token]);
+
+    const fetchProxmoxStatus = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/settings/proxmox/status`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) setProxmoxStatus(await res.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchProxmoxSettings = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/settings/proxmox/config`, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) {
+                const data = await res.json();
+                setProxmoxSettings(data);
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchProxmoxTemplates = async () => {
+        setIsSyncingTemplates(true);
+        try {
+            const res = await fetch(`${API_URL}/api/settings/proxmox/templates`, { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json();
+            if (res.ok) {
+                setProxmoxTemplates(data);
+                if (isSyncingTemplates) alert('Templates synchronized successfully');
+            } else {
+                alert(data.message || 'Failed to sync templates');
+            }
+        } catch (e: any) { 
+            console.error(e); 
+            if (proxmoxStatus?.status === 'error') {
+                alert(`Proxmox Connection Error: ${proxmoxStatus.message}`);
+            } else {
+                alert('Connection error while syncing templates. Please verify Proxmox settings.');
+            }
+        } finally {
+            setIsSyncingTemplates(false);
+        }
+    };
+
+    const handleBulkNotify = async () => {
+        if (selectedIds.length === 0) return;
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`${API_URL}/api/users/bulk-notify`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, 
+                body: JSON.stringify({ userIds: selectedIds }) 
+            });
+            const data = await res.json();
+            if (res.ok) { 
+                alert(data.message); 
+                setSelectedIds([]); 
+            } else {
+                alert(data.message || 'Notification failed');
+            }
+        } catch (e: any) { 
+            console.error(e); 
+            alert('Connection error: ' + e.message);
+        } finally { 
+            setIsSubmitting(false); 
+        }
+    };
+
+    const handleBulkStatusChange = async (status: string) => {
+        if (selectedIds.length === 0) return;
+        const confirmMsg = status === 'enrolled' ? 'Enable' : status === 'suspended' ? 'Disable' : 'Update status for';
+        if (!window.confirm(`${confirmMsg} ${selectedIds.length} selected users?`)) return;
+
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`${API_URL}/api/users/bulk-status`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, 
+                body: JSON.stringify({ userIds: selectedIds, status }) 
+            });
+            const data = await res.json();
+            if (res.ok) { 
+                alert(data.message); 
+                setSelectedIds([]); 
+                fetchData(); 
+            } else {
+                alert(data.message || 'Status update failed');
+            }
+        } catch (e: any) { 
+            console.error(e); 
+            alert('Connection error: ' + e.message);
+        } finally { 
+            setIsSubmitting(false); 
+        }
+    };
 
     const fetchRoles = async () => {
         try {
@@ -155,6 +265,10 @@ const AdminManagement: React.FC = () => {
     };
 
     const hasPerm = (p: string) => isAdmin || user?.permissions?.includes(p) || false;
+    const canManageUserRecord = (targetUser: any) => {
+        if (isAdmin) return true;
+        return targetUser?.role === 'student' && (isFacilitator || isLabTechnician);
+    };
 
     const toggleSelectAll = () => {
         const selectableItems = activeTab === 'users' ? data.filter(u => u.role !== 'admin') : data;
@@ -336,6 +450,34 @@ const AdminManagement: React.FC = () => {
 
     const toggleProgramme = (p: string) => setUserFormData(prev => ({ ...prev, programmes: prev.programmes.includes(p) ? prev.programmes.filter(i => i !== p) : [...prev.programmes, p] }));
 
+    // --- Lab Management Functions ---
+    const handleAddLab = () => {
+        // Not implemented
+    };
+
+    const handleEditLab = (_l: any) => {
+        // Not implemented
+    };
+
+    const deleteLab = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this lab facility?')) return;
+        try {
+            const res = await fetch(`${API_URL}/api/labs/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                fetchData();
+                alert('Lab deleted successfully');
+            } else {
+                const r = await res.json();
+                alert(r.message || 'Failed to delete lab');
+            }
+        } catch (e: any) {
+            alert(e.message);
+        }
+    };
+
     const handleDownload = async (sid: string, idx: number, name: string) => {
         try {
             const res = await fetch(`${API_URL}/api/submissions/download/${sid}/${idx}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -406,6 +548,7 @@ const AdminManagement: React.FC = () => {
                 provisionedUrl: selectedBooking.provisioningType === 'aws' ? selectedBooking.awsProvisioning?.launchUrl : undefined,
                 ...overrides
             };
+            console.log('Saving booking with payload:', payload);
             const res = await fetch(`${API_URL}/api/bookings/${selectedBooking._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -419,11 +562,33 @@ const AdminManagement: React.FC = () => {
     };
 
     const deleteBooking = async (id: string) => {
-        if (!window.confirm('Purge?')) return;
+        const reason = window.prompt('Reason for purging this record?');
+        if (reason === null) return;
+        
+        setBookingActionLoading(true);
         try {
-            const res = await fetch(`${API_URL}/api/bookings/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-            if (res.ok) { alert('Purged'); setIsBookingModalOpen(false); fetchData(); }
-        } catch (e) { console.error(e); }
+            const res = await fetch(`${API_URL}/api/bookings/${id}`, { 
+                method: 'DELETE', 
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({ action: 'permanent', reason: reason || 'Admin Purge' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) { 
+                alert('Record permanently purged'); 
+                setIsBookingModalOpen(false); 
+                fetchData(); 
+            } else {
+                alert(data.message || 'Purge failed');
+            }
+        } catch (e: any) { 
+            console.error(e); 
+            alert('Connection error: ' + e.message);
+        } finally {
+            setBookingActionLoading(false);
+        }
     };
 
     const handleFacilitatorBookingSubmit = async (e: React.FormEvent) => {
@@ -472,15 +637,57 @@ const AdminManagement: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="relative w-full sm:w-96"><Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" placeholder="Search identities..." className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] font-bold shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                 <div className="flex gap-3">
+                    {hasPerm('provision_labs') && <button onClick={() => setActiveTab('bookings')} className="px-6 py-4 bg-white border border-primary/20 text-primary rounded-2xl font-black text-[10px] uppercase shadow-sm flex items-center gap-2 hover:bg-primary/5"><Calendar className="w-4 h-4" />Provision Labs</button>}
                     <div className="flex bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"><button onClick={() => handleExport('csv')} className="px-4 py-4 hover:bg-slate-50 border-r border-slate-100 transition-colors"><Download className="w-4 h-4 text-slate-400" /></button><button onClick={() => handleExport('pdf')} className="px-4 py-4 hover:bg-slate-50 transition-colors"><FileText className="w-4 h-4 text-slate-400" /></button></div>
                     {hasPerm('manage_users') && <div className="flex gap-2"><button onClick={() => setIsBulkModalOpen(true)} className="px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-slate-900/10 flex items-center gap-2"><Plus className="w-4 h-4" />Bulk</button><button onClick={handleAddUser} className="px-8 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-primary/10 flex items-center gap-2"><Plus className="w-4 h-4" />Enroll</button></div>}
                 </div>
             </div>
-            {selectedIds.length > 0 && <div className="bg-slate-900 text-white px-8 py-4 rounded-[1.5rem] flex items-center justify-between animate-in slide-in-from-top-2"><p className="text-[10px] font-black uppercase tracking-widest">{selectedIds.length} selected identities</p><div className="flex gap-3"><button onClick={openBulkDeleteModal} className="px-6 py-2 bg-red-600 rounded-xl text-[10px] font-black uppercase">Terminate Selected</button><button onClick={() => setSelectedIds([])} className="p-2 hover:bg-white/10 rounded-xl"><X className="w-4 h-4" /></button></div></div>}
+            {isAdmin && selectedIds.length > 0 && (
+                <div className="bg-slate-900 text-white px-8 py-4 rounded-[1.5rem] flex items-center justify-between animate-in slide-in-from-top-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest">{selectedIds.length} selected identities</p>
+                    <div className="flex gap-3">
+                        <button onClick={handleBulkNotify} className="px-6 py-2 bg-primary/20 hover:bg-primary/30 text-primary rounded-xl text-[10px] font-black uppercase flex items-center gap-2">
+                            <Mail className="w-4 h-4" /> Release Emails
+                        </button>
+                        <button onClick={() => handleBulkStatusChange('suspended')} className="px-6 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 rounded-xl text-[10px] font-black uppercase flex items-center gap-2">
+                            <UserMinus className="w-4 h-4" /> Disable Students
+                        </button>
+                        <button onClick={openBulkDeleteModal} className="px-6 py-2 bg-red-600 rounded-xl text-[10px] font-black uppercase flex items-center gap-2">
+                            <Trash2 className="w-4 h-4" /> Terminate Selected
+                        </button>
+                        <button onClick={() => setSelectedIds([])} className="p-2 hover:bg-white/10 rounded-xl"><X className="w-4 h-4" /></button>
+                    </div>
+                </div>
+            )}
             <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
                 <div className="overflow-x-auto"><table className="w-full">
-                    <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-8 py-6 text-left"><input type="checkbox" checked={selectedIds.length === data.length && data.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" /></th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Identity</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Access</th><th className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">{Array.isArray(data) && data.filter(u => u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase())).map((u: any) => (<tr key={u._id} className={`hover:bg-slate-50/50 transition-colors ${selectedIds.includes(u._id) ? 'bg-primary/10/30' : ''}`}><td className="px-8 py-6">{u.role !== 'admin' ? <input type="checkbox" checked={selectedIds.includes(u._id)} onChange={() => toggleSelect(u._id)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" /> : <div className="w-4 h-4" />}</td><td className="px-8 py-6"><div className="font-black text-slate-900 tracking-tight">{u.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase">{u.email}</div></td><td className="px-8 py-6"><span className="px-4 py-1.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest">{u.role}</span></td><td className="px-8 py-6"><div className="flex gap-4 justify-end">{isAdmin && <button onClick={() => openUserLogs(u)} className="text-primary hover:text-primary/90 font-black text-[10px] uppercase transition-all flex items-center gap-2"><History className="w-3 h-3" />Logs</button>} {u.role !== 'admin' && (isAdmin || (isFacilitator)) && <button onClick={() => handleEditUser(u)} className="text-primary hover:text-primary/80 font-black text-[10px] uppercase transition-all flex items-center gap-2"><FileText className="w-3 h-3" />Update</button>} {u.role !== 'admin' && isAdmin && <button onClick={() => openDeleteModal(u)} className="text-red-600 hover:text-red-700 font-black text-[10px] uppercase transition-all flex items-center gap-2"><Trash2 className="w-3 h-3" />Terminate</button>}</div></td></tr>))}</tbody>
+                    <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-8 py-6 text-left">{isAdmin ? <input type="checkbox" checked={selectedIds.length === data.length && data.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" /> : <div className="w-4 h-4" />}</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Identity</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Access</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th><th className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">{Array.isArray(data) && data.filter(u => u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase())).map((u: any) => (
+                        <tr key={u._id} className={`hover:bg-slate-50/50 transition-colors ${selectedIds.includes(u._id) ? 'bg-primary/10/30' : ''}`}>
+                            <td className="px-8 py-6">{isAdmin && u.role !== 'admin' ? <input type="checkbox" checked={selectedIds.includes(u._id)} onChange={() => toggleSelect(u._id)} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" /> : <div className="w-4 h-4" />}</td>
+                            <td className="px-8 py-6"><div className="font-black text-slate-900 tracking-tight">{u.name}</div><div className="text-[10px] text-slate-400 font-bold uppercase">{u.email}</div></td>
+                            <td className="px-8 py-6"><span className="px-4 py-1.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-widest">{u.role}</span></td>
+                            <td className="px-8 py-6">
+                                <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${u.status === 'enrolled' ? 'bg-emerald-50 text-emerald-700' : u.status === 'inactive' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                    {u.status === 'inactive' ? 'Suspended' : u.status}
+                                </span>
+                            </td>
+                            <td className="px-8 py-6"><div className="flex gap-4 justify-end">
+                                {isAdmin && <button onClick={() => openUserLogs(u)} className="text-primary hover:text-primary/90 font-black text-[10px] uppercase transition-all flex items-center gap-2"><History className="w-3 h-3" />Logs</button>} 
+                                {canManageUserRecord(u) && (
+                                    <>
+                                        <button onClick={() => { setSelectedIds([u._id]); handleBulkNotify(); }} className="text-primary hover:text-primary/80 font-black text-[10px] uppercase transition-all flex items-center gap-2"><Mail className="w-3 h-3" />Email</button>
+                                        <button onClick={() => { setSelectedIds([u._id]); handleBulkStatusChange(u.status === 'inactive' ? 'enrolled' : 'suspended'); }} className={`${u.status === 'inactive' ? 'text-emerald-600' : 'text-amber-600'} font-black text-[10px] uppercase transition-all flex items-center gap-2`}>
+                                            {u.status === 'inactive' ? <CheckCircle className="w-3 h-3" /> : <UserMinus className="w-3 h-3" />}
+                                            {u.status === 'inactive' ? 'Enable' : 'Disable'}
+                                        </button>
+                                        <button onClick={() => handleEditUser(u)} className="text-slate-600 hover:text-slate-900 font-black text-[10px] uppercase transition-all flex items-center gap-2"><FileText className="w-3 h-3" />Update</button>
+                                    </>
+                                )} 
+                                {u.role !== 'admin' && isAdmin && <button onClick={() => openDeleteModal(u)} className="text-red-600 hover:text-red-700 font-black text-[10px] uppercase transition-all flex items-center gap-2"><Trash2 className="w-3 h-3" />Terminate</button>}
+                            </div></td>
+                        </tr>
+                    ))}</tbody>
                 </table></div>
             </div>
         </div>
@@ -506,25 +713,99 @@ const AdminManagement: React.FC = () => {
             </div>
             <div className="bg-slate-950 rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-800">
                 <div className="px-8 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/50"><div className="flex gap-2"><div className="w-3 h-3 rounded-full bg-red-500/20" /><div className="w-3 h-3 rounded-full bg-accent/100/20" /><div className="w-3 h-3 rounded-full bg-primary/20" /></div><div className="flex items-center gap-3"><Terminal className="w-4 h-4 text-slate-500" /><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">System Monitor Console</span></div><div className="w-12" /></div>
-                <div className="p-6 font-mono text-[11px] h-[500px] overflow-y-auto custom-scrollbar">{logs.map((log: any) => (<div key={log._id} className="flex gap-6 py-1.5 group border-b border-slate-900/50"><span className="text-slate-600 shrink-0">[{new Date(log.timestamp).toISOString()}]</span><span className={`font-bold uppercase w-16 shrink-0 ${log.severity === 'error' ? 'text-red-400' : 'text-primary/60'}`}>{log.severity}</span><span className="text-slate-200 group-hover:text-white transition-colors">{log.message}</span></div>))}</div>
+                <div className="p-6 font-mono text-[11px] h-[500px] overflow-y-auto custom-scrollbar">{logs.map((log: any) => (<div key={log._id} className="flex gap-6 py-1.5 group border-b border-slate-900/50"><span className="text-slate-600 shrink-0">[{new Date(getLogTimestamp(log)).toISOString()}]</span><span className={`font-bold uppercase w-16 shrink-0 ${log.severity === 'error' ? 'text-red-400' : 'text-primary/60'}`}>{log.severity}</span><span className="text-slate-200 group-hover:text-white transition-colors">{log.message}</span></div>))}</div>
             </div>
         </div>
     );
 
     const renderLabsTab = () => (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {Array.isArray(data) && data.map((l: any) => (
-                <div key={l._id} className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm group hover:border-primary/40 transition-all hover:shadow-xl"><div className="flex justify-between items-start mb-8"><div className="p-5 bg-primary/10 rounded-3xl group-hover:bg-primary group-hover:text-white transition-colors"><Database className="w-8 h-8" /></div><span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${l.status === 'active' ? 'bg-primary/10 text-primary/80' : 'bg-red-50 text-red-700'}`}>{l.status}</span></div><h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">{l.name}</h3><p className="text-slate-500 text-xs mb-8 leading-relaxed line-clamp-2">{l.description}</p><div className="flex gap-3"><button onClick={() => window.open(AWS_LAUNCH_URL, '_blank')} className="flex-1 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg shadow-primary/10">Modify</button><button className="px-6 py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase transition-all hover:bg-slate-50">Config</button></div></div>
-            ))}
+        <div className="space-y-6">
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4">
+                    <Database className="w-6 h-6 text-primary" />
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Lab Facilities</h3>
+                </div>
+                {isAdmin && (
+                    <button 
+                        onClick={handleAddLab}
+                        className="px-8 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-primary/10 flex items-center gap-2 transition-all active:scale-95"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Add New Facility
+                    </button>
+                )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {Array.isArray(data) && data.map((l: any) => (
+                    <div key={l._id} className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm group hover:border-primary/40 transition-all hover:shadow-xl relative overflow-hidden">
+                        {l.provisioningType === 'proxmox' && (
+                            <div className="absolute top-0 right-0 p-3 bg-primary/10 rounded-bl-2xl">
+                                <Server className="w-4 h-4 text-primary" />
+                            </div>
+                        )}
+                        <div className="flex justify-between items-start mb-8">
+                            <div className="p-5 bg-primary/10 rounded-3xl group-hover:bg-primary group-hover:text-white transition-colors">
+                                <Database className="w-8 h-8" />
+                            </div>
+                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${l.status === 'active' ? 'bg-primary/10 text-primary/80' : 'bg-red-50 text-red-700'}`}>
+                                {l.status}
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tight">{l.name}</h3>
+                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Cpu className="w-3 h-3" /> {l.type} • {l.provisioningType || 'docker'}
+                        </p>
+                        <p className="text-slate-500 text-xs mb-8 leading-relaxed line-clamp-3 h-12">{l.description}</p>
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => handleEditLab(l)} 
+                                className="flex-1 py-4 bg-primary hover:bg-primary/80 text-white rounded-2xl text-[10px] font-black uppercase transition-all shadow-lg shadow-primary/10"
+                            >
+                                Modify
+                            </button>
+                            <button 
+                                onClick={() => deleteLab(l._id)}
+                                className="px-6 py-4 bg-white border border-slate-200 text-red-600 rounded-2xl text-[10px] font-black uppercase transition-all hover:bg-red-50"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
     const renderBookingsTab = () => (
-        <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto"><table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Candidate</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Facility</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Approval</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Provisioning</th><th className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Control</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{Array.isArray(data) && data.map((b: any) => (<tr key={b._id} className="hover:bg-slate-50/50 transition-colors"><td className="px-8 py-6 font-black text-slate-900">{b.user?.name}</td><td className="px-8 py-6 text-primary font-black text-[10px] uppercase tracking-tight">{b.lab?.name}</td><td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${b.approvalStatus === 'approved' ? 'bg-sky-50 text-sky-700' : b.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{b.approvalStatus || 'pending'}</span></td><td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getBookingStatusClasses(b)}`}>{getBookingStatusLabel(b)}</span></td><td className="px-8 py-6 text-right"><button onClick={() => openBookingControl(b)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm">Control</button></td></tr>))}</tbody>
-            </table></div>
+        <div className="space-y-6">
+            {(isAdmin || hasPerm('provision_labs')) && (
+                <div className={`p-4 rounded-[1.5rem] border flex items-center justify-between bg-white shadow-sm ${proxmoxStatus?.status === 'connected' ? 'border-primary/20' : 'border-red-100'}`}>
+                    <div className="flex items-center gap-4">
+                        <div className={`p-2 rounded-xl ${proxmoxStatus?.status === 'connected' ? 'bg-primary/10 text-primary' : 'bg-red-50 text-red-600'}`}>
+                            <Server className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Proxmox Connection</p>
+                            <p className="text-xs font-black text-slate-900 uppercase">
+                                {proxmoxStatus?.status === 'connected' ? 'Online & Synchronized' : proxmoxStatus?.status === 'error' ? 'Connection offline' : 'Checking connection...'}
+                            </p>
+                        </div>
+                    </div>
+                    {proxmoxStatus?.status === 'error' && (
+                        <div className="flex items-center gap-3">
+                            <span className="text-[9px] font-bold text-red-500 uppercase italic">Error: {proxmoxStatus.message}</span>
+                            <button onClick={fetchProxmoxStatus} className="p-2 hover:bg-slate-50 rounded-lg transition-colors"><RefreshCw className="w-4 h-4 text-slate-400" /></button>
+                        </div>
+                    )}
+                </div>
+            )}
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto"><table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Candidate</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Facility</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Approval</th><th className="px-8 py-6 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Provisioning</th><th className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Control</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">{Array.isArray(data) && data.map((b: any) => (<tr key={b._id} className="hover:bg-slate-50/50 transition-colors"><td className="px-8 py-6"><div className="font-black text-slate-900">{b.user?.name}</div><div className="text-[9px] text-slate-400 font-black uppercase">{b.user?.role}</div></td><td className="px-8 py-6 text-primary font-black text-[10px] uppercase tracking-tight">{b.lab?.name}</td><td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${b.approvalStatus === 'approved' ? 'bg-sky-50 text-sky-700' : b.approvalStatus === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{b.approvalStatus || 'pending'}</span></td><td className="px-8 py-6"><span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getBookingStatusClasses(b)}`}>{getBookingStatusLabel(b)}</span></td><td className="px-8 py-6 text-right"><button onClick={() => openBookingControl(b)} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-900 hover:bg-slate-50 rounded-xl text-[10px] font-black uppercase transition-all shadow-sm">Control</button></td></tr>))}</tbody>
+                </table></div>
+            </div>
         </div>
     );
 
@@ -573,7 +854,7 @@ const AdminManagement: React.FC = () => {
         <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
             <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3"><ShieldAlert className="w-5 h-5 text-red-600" />Security & Audit Trails</h3></div>
             <div className="overflow-x-auto"><table className="w-full"><thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</th><th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Event</th><th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">User</th><th className="px-8 py-5 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Details</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{Array.isArray(logs) && logs.map((log: any) => (<tr key={log._id} className="hover:bg-slate-50/50 transition-colors"><td className="px-8 py-5 text-[10px] font-bold text-slate-500 font-mono">{new Date(log.timestamp).toLocaleString()}</td><td className="px-8 py-5"><span className="px-3 py-1 bg-primary/5 text-primary rounded-full text-[9px] font-black uppercase tracking-widest">{log.eventType}</span></td><td className="px-8 py-5 text-xs font-bold text-slate-700">{log.userId?.name || 'SYSTEM'}</td><td className="px-8 py-5 text-xs text-slate-500 font-medium">{log.message}</td></tr>))}</tbody>
+                <tbody className="divide-y divide-slate-100">{Array.isArray(logs) && logs.map((log: any) => (<tr key={log._id} className="hover:bg-slate-50/50 transition-colors"><td className="px-8 py-5 text-[10px] font-bold text-slate-500 font-mono">{new Date(getLogTimestamp(log)).toLocaleString()}</td><td className="px-8 py-5"><span className="px-3 py-1 bg-primary/5 text-primary rounded-full text-[9px] font-black uppercase tracking-widest">{log.eventType}</span></td><td className="px-8 py-5 text-xs font-bold text-slate-700">{log.userId?.name || 'SYSTEM'}</td><td className="px-8 py-5 text-xs text-slate-500 font-medium">{log.message}</td></tr>))}</tbody>
             </table></div>
         </div>
     );
@@ -586,7 +867,7 @@ const AdminManagement: React.FC = () => {
                 <aside className="w-full lg:w-72 space-y-3">
                     {!isFacilitator && <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'overview' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><BarChart3 className="w-5 h-5" />Overview</div></button>}
                     <button onClick={() => setActiveTab('users')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'users' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><Users className="w-5 h-5" />Identities</div></button>
-                    <button onClick={() => setActiveTab('labs')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'labs' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><Database className="w-5 h-5" />Facilites</div></button>
+                    {isAdmin && <button onClick={() => setActiveTab('labs')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'labs' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><Database className="w-5 h-5" />Facilites</div></button>}
                     <button onClick={() => setActiveTab('bookings')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'bookings' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><Calendar className="w-5 h-5" />Reservations</div></button>
                     {!isFacilitator && <><div className="py-4 px-8"><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">System Intelligence</p></div>
                     <button onClick={() => setActiveTab('monitoring')} className={`w-full flex items-center justify-between px-8 py-5 rounded-[1.5rem] font-black text-[11px] uppercase tracking-widest transition-all group ${activeTab === 'monitoring' ? 'bg-primary text-white shadow-2xl translate-x-2' : 'text-slate-500 hover:bg-white hover:text-primary'}`}><div className="flex items-center gap-4"><Activity className="w-5 h-5" />Real-time</div></button>
@@ -606,15 +887,15 @@ const AdminManagement: React.FC = () => {
 
             {/* Modals */}
             {isUserModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => !isSubmitting && setIsUserModalOpen(false)} /><div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"><div className="flex justify-between items-center p-10 border-b border-slate-100"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{selectedUser ? 'Modify credentials' : 'New identity'}</h2><p className="text-[10px] font-black text-slate-400 uppercase mt-1.5">{selectedUser ? 'Updating existing identity' : 'Configuring new system access protocol'}</p></div><button onClick={() => setIsUserModalOpen(false)} className="p-4 hover:bg-slate-50 rounded-2xl transition-all active:scale-95"><X className="w-6 h-6 text-slate-400" /></button></div><div className="flex-1 overflow-y-auto p-10 pt-6">{formError && <div className="mb-8 p-5 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4"><ShieldAlert className="w-6 h-6 text-red-600" /><p className="text-red-600 text-xs font-black uppercase">{formError}</p></div>}<form onSubmit={handleUserFormSubmit} className="space-y-8"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Identity</label><input type="text" required value={userFormData.name} onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Email</label><input type="email" required value={userFormData.email} onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Username</label><input type="text" required value={userFormData.username} onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Password</label><input type="password" required={!selectedUser} value={userFormData.password} onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Role</label><select required value={userFormData.role} onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold appearance-none cursor-pointer hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all">{roles.filter(r => isAdmin || r.name === 'student').map((r: any) => (<option key={r._id} value={r.name}>{r.name.charAt(0).toUpperCase() + r.name.slice(1)}</option>))}{roles.length === 0 && <option value="student">Student</option>}</select></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Student ID</label><input type="text" value={userFormData.studentId} onChange={(e) => setUserFormData({ ...userFormData, studentId: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" placeholder="Optional for staff" /></div></div><div className="space-y-4"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Programmes</label><div className="flex flex-wrap gap-3">{['Artificial Intelligence', 'Cybersecurity', 'Management Information System'].filter(prog => isAdmin || user?.programmes?.includes(prog)).map(prog => (<button key={prog} type="button" onClick={() => toggleProgramme(prog)} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all ${userFormData.programmes.includes(prog) ? 'bg-slate-900 text-white shadow-xl scale-105' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>{prog}</button>))}</div></div><div className="flex gap-5 pt-10"><button type="button" disabled={isSubmitting} onClick={() => setIsUserModalOpen(false)} className="flex-1 py-5 border border-slate-200 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-50 transition-all active:scale-95">Abort</button><button type="submit" disabled={isSubmitting} className="flex-[2] py-5 bg-primary text-white rounded-[1.5rem] font-black text-[10px] uppercase flex items-center justify-center gap-3 active:scale-[0.98] shadow-2xl shadow-primary/20">{isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Shield className="w-5 h-5" />}{selectedUser ? 'Commit updates' : 'Authorize Enrollment'}</button></div></form></div></div></div>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => !isSubmitting && setIsUserModalOpen(false)} /><div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"><div className="flex justify-between items-center p-10 border-b border-slate-100"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{selectedUser ? 'Modify credentials' : 'New identity'}</h2><p className="text-[10px] font-black text-slate-400 uppercase mt-1.5">{selectedUser ? 'Updating existing identity' : 'Configuring new system access protocol'}</p></div><button onClick={() => setIsUserModalOpen(false)} className="p-4 hover:bg-slate-50 rounded-2xl transition-all active:scale-95"><X className="w-6 h-6 text-slate-400" /></button></div><div className="flex-1 overflow-y-auto p-10 pt-6">{formError && <div className="mb-8 p-5 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-4"><ShieldAlert className="w-6 h-6 text-red-600" /><p className="text-red-600 text-xs font-black uppercase">{formError}</p></div>}<form onSubmit={handleUserFormSubmit} className="space-y-8"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Identity</label><input type="text" required value={userFormData.name} onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Email</label><input type="email" required value={userFormData.email} onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Username</label><input type="text" required value={userFormData.username} onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Password {selectedUser && '(Leave blank to keep current)'}</label><input type="password" value={userFormData.password} onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold" /></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Account Role</label><select value={userFormData.role} onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold">{roles.map(r => (<option key={r.name} value={r.name}>{r.name.toUpperCase()}</option>))}</select></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Status</label><select value={userFormData.status} onChange={(e) => setUserFormData({ ...userFormData, status: e.target.value })} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold"><option value="enrolled">Enrolled</option><option value="suspended">Suspended</option><option value="graduated">Graduated</option></select></div></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">Programmes</label><div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{['Artificial Intelligence', 'Cybersecurity', 'Management Information System'].map(p => (<button key={p} type="button" onClick={() => toggleProgramme(p)} className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase transition-all border ${userFormData.programmes.includes(p) ? 'bg-primary border-primary text-white' : 'bg-white border-slate-200 text-slate-400 hover:border-primary/40'}`}>{p}</button>))}</div></div><button type="submit" disabled={isSubmitting} className="w-full py-5 bg-primary text-white rounded-2xl font-black uppercase shadow-xl shadow-primary/10 hover:bg-primary/90 transition-all active:scale-[0.98]">{isSubmitting ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : (selectedUser ? 'Confirm Updates' : 'Enroll Identity')}</button></form></div></div></div>
             )}
 
             {isDeleteModalOpen && (userToDelete || feedbackToDelete) && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setIsDeleteModalOpen(false)} /><div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-[3rem] shadow-2xl p-10 flex flex-col gap-8"><div className="text-center"><div className="w-20 h-20 bg-red-50 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6"><ShieldOff className="w-10 h-10 text-red-600" /></div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{feedbackToDelete ? 'Purge Feedback' : 'Terminate Authorization'}</h2><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{feedbackToDelete ? `Record: "${feedbackToDelete.subject}"` : `Target: ${userToDelete.name}`}</p></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason (Required)</label><textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold text-sm min-h-[120px] resize-none" placeholder="Administrative reason..." /></div><div className="grid grid-cols-1 gap-4">{!feedbackToDelete && activeTab !== 'recycle_bin' && <button onClick={() => processDelete()} disabled={isDeleting} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 active:scale-[0.98] shadow-2xl"><Archive className="w-5 h-5" /> Move to Recycle Bin</button>}<button onClick={() => { setDeleteType('permanent'); processDelete(); }} disabled={isDeleting} className="w-full py-5 border border-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-red-50 active:scale-95 transition-all"><Trash2 className="w-5 h-5" /> Permanent Purge</button><button onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleting} className="w-full py-4 text-slate-400 font-black text-[10px] uppercase hover:text-slate-600 transition-colors">Cancel</button></div></div></div>
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setIsDeleteModalOpen(false)} /><div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-[3rem] shadow-2xl p-10 flex flex-col gap-8"><div className="text-center"><div className="w-20 h-20 bg-red-50 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6"><ShieldOff className="w-10 h-10 text-red-600" /></div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{feedbackToDelete ? 'Purge Feedback' : 'Terminate Authorization'}</h2><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{feedbackToDelete ? `Record: "${feedbackToDelete.subject}"` : `Target: ${userToDelete.name}`}</p></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reason (Required)</label><textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold text-sm min-h-[120px] resize-none" placeholder="Administrative reason..." /></div><div className="grid grid-cols-1 gap-4">{!feedbackToDelete && activeTab !== 'recycle_bin' && <button onClick={() => processDelete()} disabled={isDeleting} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 active:scale-[0.98] shadow-2xl"><Archive className="w-5 h-5" /> Move to Recycle Bin</button>}<button onClick={() => { setDeleteType('permanent'); processDelete(); }} disabled={isDeleting} className="w-full py-5 border border-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-3 hover:bg-red-50 active:scale-95 transition-all"><Trash2 className="w-5 h-5" /> Permanent Purge</button><button onClick={() => setIsDeleteModalOpen(false)} className="w-full py-4 text-slate-400 font-black text-[10px] uppercase">Cancel Action</button></div></div></div>
             )}
 
             {isLogsModalOpen && selectedUser && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsLogsModalOpen(false)} /><div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"><div className="flex justify-between items-center p-10 border-b border-slate-100 bg-slate-50/50"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Activity Matrix</h2><p className="text-[10px] font-black text-slate-400 uppercase mt-1.5 flex items-center gap-2"><Users className="w-3 h-3" /> Trail for: {selectedUser.name}</p></div><button onClick={() => setIsLogsModalOpen(false)} className="p-4 hover:bg-white rounded-2xl shadow-sm"><X className="w-6 h-6 text-slate-400" /></button></div><div className="flex-1 overflow-y-auto p-2 bg-slate-950">{isLoadingLogs ? <div className="h-96 flex flex-col items-center justify-center gap-4 text-primary"><Loader2 className="w-10 h-10 animate-spin" /><span className="text-[10px] font-black uppercase tracking-[0.3em]">Decrypting...</span></div> : <div className="p-6 font-mono text-[11px] space-y-1">{userLogs.length > 0 ? userLogs.map((l: any) => (<div key={l._id} className="flex gap-6 py-2 border-b border-slate-900/50"><span className="text-slate-600 shrink-0">[{new Date(l.timestamp).toISOString()}]</span><span className={`font-bold uppercase w-16 shrink-0 ${l.severity === 'error' ? 'text-red-400' : 'text-primary/60'}`}>{l.severity}</span><span className="text-slate-200">{l.message}</span></div>)) : <div className="py-20 text-center text-slate-600 font-black uppercase tracking-widest">No data found</div>}</div>}</div></div></div>
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsLogsModalOpen(false)} /><div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"><div className="flex justify-between items-center p-10 border-b border-slate-100 bg-slate-50/50"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Activity Matrix</h2><p className="text-[10px] font-black text-slate-400 uppercase mt-1.5 flex items-center gap-2"><Users className="w-3 h-3" /> Trail for: {selectedUser.name}</p></div><button onClick={() => setIsLogsModalOpen(false)} className="p-4 hover:bg-white rounded-2xl shadow-sm"><X className="w-6 h-6 text-slate-400" /></button></div><div className="flex-1 overflow-y-auto p-2 bg-slate-950">{isLoadingLogs ? <div className="h-96 flex flex-col items-center justify-center gap-4 text-primary"><Loader2 className="w-10 h-10 animate-spin" /><span className="text-[10px] font-black uppercase tracking-[0.3em]">Decrypting...</span></div> : <div className="p-6 font-mono text-[11px] space-y-1">{userLogs.length > 0 ? userLogs.map((l: any) => (<div key={l._id} className="flex gap-6 py-2 border-b border-slate-900/50"><span className="text-slate-600 shrink-0">[{new Date(getLogTimestamp(l)).toISOString()}]</span><span className={`font-bold uppercase w-16 shrink-0 ${l.severity === 'error' ? 'text-red-400' : 'text-primary/60'}`}>{l.severity}</span><span className="text-slate-200">{l.message}</span></div>)) : <div className="py-20 text-center text-slate-600 font-black uppercase tracking-widest">No data found</div>}</div>}</div></div></div>
             )}
 
             {isBookingModalOpen && selectedBooking && (
@@ -687,9 +968,44 @@ const AdminManagement: React.FC = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Template</label><input value={selectedBooking.localProvisioning?.templateName || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), templateName: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">VM ID</label><input value={selectedBooking.localProvisioning?.vmId || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), vmId: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
-                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Node</label><input value={selectedBooking.localProvisioning?.nodeName || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), nodeName: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center px-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase">Template</label>
+                                    <button 
+                                        onClick={fetchProxmoxTemplates} 
+                                        disabled={isSyncingTemplates}
+                                        className="text-[9px] font-black text-primary uppercase flex items-center gap-1 hover:text-primary/80 transition-colors disabled:opacity-50"
+                                    >
+                                        <RefreshCw className={`w-2.5 h-2.5 ${isSyncingTemplates ? 'animate-spin' : ''}`} /> 
+                                        {isSyncingTemplates ? 'Syncing...' : 'Sync'}
+                                    </button>
+                                </div>
+                                <select 
+                                    value={selectedBooking.localProvisioning?.templateName || ''} 
+                                    onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), templateName: e.target.value, vmId: '', ipAddress: '' } })} 
+                                    className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold appearance-none cursor-pointer"
+                                    disabled={proxmoxTemplates.length === 0}
+                                >
+                                    <option value="">
+                                        {proxmoxTemplates.length > 0 ? 'Select Template' : 'Sync Templates First'}
+                                    </option>
+                                    {proxmoxTemplates.map((t: any) => (
+                                        <option key={t.vmid} value={String(t.vmid)}>{t.name} ({t.vmid})</option>
+                                    ))}
+                                </select>
+                                {proxmoxTemplates.length === 0 && (
+                                    <p className="px-1 text-[10px] font-bold text-amber-600 uppercase">Sync Proxmox templates before provisioning.</p>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">VM ID</label>
+                                <input
+                                    value={selectedBooking.localProvisioning?.vmId || 'Auto-assigned on provision'}
+                                    readOnly
+                                    className="w-full bg-slate-100 border border-slate-200 rounded-2xl px-6 py-4 text-slate-500 font-bold"
+                                />
+                            </div>
+                            <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Node</label><input value={selectedBooking.localProvisioning?.nodeName || proxmoxSettings?.nodeName || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), nodeName: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Username</label><input value={selectedBooking.localProvisioning?.username || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), username: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Password</label><input value={selectedBooking.localProvisioning?.password || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), password: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
                             <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">IP Address</label><input value={selectedBooking.localProvisioning?.ipAddress || ''} onChange={(e) => setSelectedBooking({ ...selectedBooking, localProvisioning: { ...(selectedBooking.localProvisioning || {}), ipAddress: e.target.value } })} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold" /></div>
@@ -712,11 +1028,44 @@ const AdminManagement: React.FC = () => {
                         </div>
                     )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4"><button onClick={() => setSelectedBooking({ ...selectedBooking, approvalStatus: 'approved' })} disabled={bookingActionLoading} className="flex items-center justify-center gap-3 py-5 bg-primary text-white rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-primary/10 active:scale-95 transition-all"><CheckCircle className="w-5 h-5" />Approve</button><button onClick={() => setSelectedBooking({ ...selectedBooking, approvalStatus: 'rejected' })} disabled={bookingActionLoading} className="flex items-center justify-center gap-3 py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-primary/10 active:scale-95 transition-all"><XCircle className="w-5 h-5" />Reject</button><button onClick={() => saveBookingControl()} disabled={bookingActionLoading} className="flex items-center justify-center gap-3 py-5 border border-slate-200 text-slate-900 rounded-2xl font-black text-[10px] uppercase active:scale-[0.98] transition-all"><Save className="w-5 h-5" />Save Workflow</button><button onClick={() => { if(window.confirm('Purge?')) deleteBooking(selectedBooking._id); }} disabled={bookingActionLoading} className="flex items-center justify-center gap-3 py-5 border border-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase active:scale-[0.98] transition-all"><Trash2 className="w-5 h-5" />Purge Record</button></div></div></div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <button 
+                        onClick={() => saveBookingControl({ approvalStatus: 'approved' })} 
+                        disabled={bookingActionLoading} 
+                        className="flex items-center justify-center gap-3 py-5 bg-primary text-white rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-primary/10 active:scale-95 transition-all"
+                    >
+                        <CheckCircle className="w-5 h-5" />
+                        Approve
+                    </button>
+                    <button 
+                        onClick={() => saveBookingControl({ approvalStatus: 'rejected' })} 
+                        disabled={bookingActionLoading} 
+                        className="flex items-center justify-center gap-3 py-5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl shadow-primary/10 active:scale-95 transition-all"
+                    >
+                        <XCircle className="w-5 h-5" />
+                        Reject
+                    </button>
+                    <button 
+                        onClick={() => saveBookingControl()} 
+                        disabled={bookingActionLoading} 
+                        className="flex items-center justify-center gap-3 py-5 border border-slate-200 text-slate-900 rounded-2xl font-black text-[10px] uppercase active:scale-[0.98] transition-all"
+                    >
+                        <Save className="w-5 h-5" />
+                        Save Workflow
+                    </button>
+                    <button 
+                        onClick={() => { if(window.confirm('Purge?')) deleteBooking(selectedBooking._id); }} 
+                        disabled={bookingActionLoading} 
+                        className="flex items-center justify-center gap-3 py-5 border border-red-100 text-red-600 rounded-2xl font-black text-[10px] uppercase active:scale-[0.98] transition-all"
+                    >
+                        <Trash2 className="w-5 h-5" />
+                        Purge Record
+                    </button>
+                </div></div></div>
             )}
 
             {isFacilitatorBookingOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => !bookingActionLoading && setIsFacilitatorBookingOpen(false)} /><div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-[3rem] shadow-2xl p-10 overflow-hidden flex flex-col"><div className="flex justify-between items-center mb-8"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Lab Reservation</h2></div><button onClick={() => setIsFacilitatorBookingOpen(false)} className="p-4 hover:bg-slate-50 rounded-2xl"><X className="w-6 h-6 text-slate-400" /></button></div><form onSubmit={handleFacilitatorBookingSubmit} className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Laboratory</label><select required value={facilitatorBookingData.labId} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, labId: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold appearance-none"><option value="">Choose Lab</option>{Array.isArray(labs) && labs.map((l: any) => (<option key={l._id} value={l._id}>{l.name}</option>))}</select></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Date</label><input required type="date" value={facilitatorBookingData.date} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Purpose</label><input type="text" placeholder="Reason..." value={facilitatorBookingData.purpose} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, purpose: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Start</label><input required type="time" value={facilitatorBookingData.startTime} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, startTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div><div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase ml-1">End</label><input required type="time" value={facilitatorBookingData.endTime} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, endTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div></div><button type="submit" disabled={bookingActionLoading} className="w-full py-5 bg-primary text-white rounded-2xl font-black uppercase shadow-xl transition-all active:scale-[0.98]">{bookingActionLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Submit Reservation'}</button></form></div></div>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => !bookingActionLoading && setIsFacilitatorBookingOpen(false)} /><div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-[3rem] shadow-2xl p-10 overflow-hidden flex flex-col"><div className="flex justify-between items-center mb-8"><div><h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Lab Reservation</h2></div><button onClick={() => setIsFacilitatorBookingOpen(false)} className="p-4 hover:bg-slate-50 rounded-2xl"><X className="w-6 h-6 text-slate-400" /></button></div><form onSubmit={handleFacilitatorBookingSubmit} className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Laboratory</label><select required value={facilitatorBookingData.labId} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, labId: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold appearance-none"><option value="">Choose Lab</option>{Array.isArray(labs) && labs.map((l: any) => (<option key={l._id} value={l._id}>{l.name}</option>))}</select></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Date</label><input required type="date" value={facilitatorBookingData.date} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Purpose</label><input type="text" placeholder="Reason..." value={facilitatorBookingData.purpose} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, purpose: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Start</label><input required type="time" value={facilitatorBookingData.startTime} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, startTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">End</label><input required type="time" value={facilitatorBookingData.endTime} onChange={e => setFacilitatorBookingData({...facilitatorBookingData, endTime: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 font-bold text-slate-900" /></div></div><button type="submit" disabled={bookingActionLoading} className="w-full py-5 bg-primary text-white rounded-2xl font-black uppercase shadow-xl transition-all active:scale-95">{bookingActionLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Confirm Reservation'}</button></form></div></div>
             )}
 
             {isBulkModalOpen && (
